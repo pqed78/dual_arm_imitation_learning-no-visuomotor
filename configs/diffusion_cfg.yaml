@@ -1,0 +1,32 @@
+# Diffusion Policy Configuration (1D Temporal UNet)
+
+algo: "diffusion"
+
+# Horizon parameters
+pred_horizon: 16       # Number of future actions predicted by model (Tp)
+obs_horizon: 2         # Number of historical observations conditioned on (To)
+act_horizon: 8         # Number of action steps executed before replanning (Ta)
+
+# UNet Architecture
+down_dims: [256, 512, 1024]
+kernel_size: 5
+n_groups: 8
+cond_predict_scale: true
+
+# Diffusion Scheduler (DDPM / DDIM)
+num_train_timesteps: 100
+beta_schedule: "squaredcos_cap_v2" # or "linear"
+prediction_type: "epsilon"         # predict noise epsilon or sample x_0
+num_inference_steps: 15            # DDIM accelerated sampling steps for fast closed-loop control
+
+# Training hyperparameters
+learning_rate: 1.0e-4
+weight_decay: 1.0e-6
+batch_size: 64
+epochs: 150
+lr_scheduler: "cosine"
+lr_warmup_steps: 500
+
+# Checkpointing & Logging
+save_interval: 10
+eval_interval: 5

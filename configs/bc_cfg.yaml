@@ -1,0 +1,25 @@
+# Behavior Cloning (BC) Configuration
+
+algo: "bc"
+model_type: "mlp" # "mlp" or "rnn"
+
+# Network architecture
+hidden_dims: [512, 512, 256]
+activation: "relu"
+dropout: 0.1
+
+# RNN specific (if model_type == "rnn")
+rnn_hidden_dim: 256
+rnn_num_layers: 2
+seq_len: 10
+
+# Training hyperparameters
+learning_rate: 1.0e-3
+weight_decay: 1.0e-5
+batch_size: 128
+epochs: 100
+lr_drop_epoch: 60
+
+# Checkpointing & Logging
+save_interval: 10
+eval_interval: 5

@@ -1,3 +1,153 @@
+# Dual Arm Imitation Learning Project
+
+This is an **independent Imitation Learning (IL)** project that is completely isolated from the existing Reinforcement Learning (RL, `dual_arm0`) environment.
+It supports the entire pipeline, from teleoperation demonstration data collection in the Isaac Sim environment to the training and simulation evaluation of three state-of-the-art robot manipulation imitation learning algorithms (**BC, Diffusion Policy, ACT**).
+
+---
+
+## 1. Project Structure
+
+```text
+/home/optimus/isaac_lab/dual_arm_il/
+├── README.md                  # Project usage guide (This document)
+├── requirements.txt           # Required Python libraries list
+├── configs/                   # Environment and model hyperparameters
+│   ├── env_cfg.py             # Teleop/IL custom Isaac Lab environment settings
+│   ├── bc_cfg.yaml            # Behavior Cloning settings
+│   ├── diffusion_cfg.yaml     # Diffusion Policy settings
+│   └── act_cfg.yaml           # ACT (Action Chunking with Transformers) settings
+├── teleop/                    # Teleoperation & Data collection
+│   ├── dual_arm_teleop.py     # Active-Arm Toggle SE(3) keyboard controller
+│   └── collect_demos.py       # Isaac Sim teleop and HDF5 episode saving script
+├── dataset/                   # Dataset pipeline
+│   └── il_dataset.py          # PyTorch HDF5 Dataset (Normalization, Horizon slicing, Chunking)
+├── models/                    # 3 Major Imitation Learning Algorithms
+│   ├── bc/                    # MLP / RNN Behavior Cloning
+│   ├── diffusion/             # 1D Temporal UNet Diffusion Policy (Chi et al. 2023)
+│   └── act/                   # CVAE + Transformer ACT (Zhao et al. 2023)
+├── scripts/                   # Execution scripts
+│   ├── generate_scripted_demos.py  # [Recommended] Script-based high-quality single demo auto-generator
+│   ├── generate_scripted_demos2.py # [Highly Recommended] Large-scale tensor parallelized ultra-fast auto-generator
+│   ├── replay_demos.py         # Verify collected HDF5 demos via simulation replay
+│   ├── train.py               # Integrated high-speed GPU training script for the 3 algorithms
+│   └── eval.py                # Policy rollout evaluation in Isaac Sim environment
+├── data/                      # Directory for collected demo files (.hdf5)
+└── checkpoints/               # Directory for trained model checkpoints
+```
+
+---
+
+## 2. Teleoperation (Keyboard Controls)
+
+To intuitively control both arms (14 DoF + 2 grippers), an **Active-Arm Toggle (Tab key)** method is provided.
+
+| Category | Key | Description |
+| :--- | :---: | :--- |
+| **Arm Selection** | `TAB` | Toggle between Right Arm (Pick) <-> Left Arm (Place) |
+| | `1` / `2` | 1: Force select Right Arm, 2: Force select Left Arm |
+| **Translation** | `W` / `S` | Move X-axis Forward(+) / Backward(-) |
+| | `A` / `D` | Move Y-axis Left(+) / Right(-) |
+| | `Q` / `E` | Move Z-axis Up(+) / Down(-) |
+| **Rotation** | `Z` / `X` | Roll (X-axis rotation) |
+| | `T` / `G` | Pitch (Y-axis rotation) |
+| | `C` / `V` | Yaw (Z-axis rotation) |
+| **Gripper** | `SPACE` or `K` | Toggle open/close gripper of the active arm |
+| | `O` / `P` | Force open (`O`) / close (`P`) gripper of the active arm |
+| **Data Collection** | `ENTER` or `Y` | **[Save Success]** Save the current episode to HDF5 and reset |
+| | `BACKSPACE` or `N` | **[Discard]** Discard the mistaken episode without saving and reset |
+| | `R` | Reset environment immediately |
+| **Speed Control** | `UP` / `DOWN` | Increase / Decrease movement speed per input |
+
+---
+
+## 3. Step-by-Step Usage Guide
+
+### ① Step 1: Demo Data Collection (Choose 1 of 3 methods)
+
+#### [Method A: Highly Recommended] Large-scale Tensor Parallelized Demo Auto-generator (`generate_scripted_demos2.py`)
+Parallelizes Inverse Kinematics (IK) solvers and State Machines 100% via PyTorch GPU tensor operations, acting as an **ultra-fast pipeline where dozens of robots simultaneously generate different demos with zero bottleneck.**
+It includes the most advanced patches, such as wrist singularity prevention, wait time optimization, and automatic baton drop detection.
+
+```bash
+# 50 robots collect 50 demos in a single episode playback (just a few seconds)!
+python scripts/generate_scripted_demos2.py --num_demos=50 --num_envs=50 --headless
+```
+
+#### [Method B] Script-based Single Demo Auto-generator (`generate_scripted_demos.py`)
+Generates perfect, high-quality demos sequentially using a single robot when debugging or visual confirmation is needed. (Wait time optimization patch applied)
+
+```bash
+# Auto-collect 50 demos while watching the GUI screen
+python scripts/generate_scripted_demos.py --num_demos=50
+```
+
+#### [Method C] Manual Keyboard Teleoperation Collection (`collect_demos.py`)
+Launches the Isaac Sim GUI and allows manual recording of successful episodes by controlling the robot directly with a keyboard.
+
+```bash
+# Collect 20 baseline demos (auto-accumulated and saved in data/demos.hdf5)
+python teleop/collect_demos.py --num_demos=20
+```
+
+> **Tip**: If you make a mistake during operation, pressing `BACKSPACE` or `N` will immediately discard the data without polluting the dataset and start a new episode.
+
+---
+
+### ② Step 2: Verify Collected Demos (`replay_demos.py`)
+Replay the recorded HDF5 trajectories in the simulation physics environment to ensure they operate stably.
+
+```bash
+# Replay demo 0
+python scripts/replay_demos.py --demo_idx=0
+
+# Sequentially replay all collected demos
+python scripts/replay_demos.py --demo_idx=-1
+```
+
+---
+
+### ③ Step 3: Imitation Learning Model Training (`train.py`)
+Performs high-speed GPU parallel training in a pure PyTorch environment without launching Isaac Sim.
+
+```bash
+# 1. Behavior Cloning (MLP Baseline)
+python scripts/train.py --algo=bc --epochs=100
+
+# 2. Diffusion Policy (1D Temporal UNet)
+python scripts/train.py --algo=diffusion --epochs=150
+
+# 3. ACT (Action Chunking with Transformers)
+python scripts/train.py --algo=act --epochs=150
+```
+
+- Weights recording the lowest Validation Loss during training are automatically preserved at `checkpoints/{algo}/best_model.pt`.
+- Normalization statistics for input observations/actions are saved at `checkpoints/{algo}/stats.pkl`.
+
+---
+
+### ④ Step 4: Isaac Sim Simulation Evaluation (`eval.py`)
+Connects the trained model to the simulation robot to measure the actual closed-loop success rate.
+
+```bash
+# Evaluate Diffusion Policy
+python scripts/eval.py --algo=diffusion --num_episodes=10
+
+# Evaluate ACT (Temporal Ensembling applied)
+python scripts/eval.py --algo=act --num_episodes=10
+
+# Evaluate Behavior Cloning
+python scripts/eval.py --algo=bc --num_episodes=10
+```
+
+---
+
+## 4. Relationship with Existing RL Environment
+
+- All code in this folder (`dual_arm_il`) does not modify any files in `/home/optimus/isaac_lab/dual_arm0`.
+- Simulation scenes (`DualArmSceneCfg`) and robot definitions are safely inherited (`configs/env_cfg.py`) and reused, meaning it causes absolutely no interference with ongoing training or tuning on the RL side.
+
+---
+
 # Dual Arm Imitation Learning (모방 학습) 프로젝트
 
 기존 강화학습(RL, `dual_arm0`) 환경과 완벽히 격리된 **독립 모방 학습(Imitation Learning, IL)** 프로젝트입니다.  

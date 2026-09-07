@@ -416,9 +416,10 @@ def main():
             # while leaving 11cm of clearance between right and left grippers!
             pick_target = obj_pos - latched_align_sign * 0.055 * latched_cube_z
             if latched_align_sign is not None:
-                place_target = obj_pos + latched_align_sign * 0.055 * target_cube_z
+                real_directed_cube_z = torch.sign(torch.sum(cube_z * target_cube_z, dim=-1, keepdim=True) + 1e-6) * cube_z
+                place_target = obj_pos + latched_align_sign * 0.055 * real_directed_cube_z
             else:
-                place_target = obj_pos + latched_align_sign * 0.055 * latched_cube_z
+                place_target = obj_pos + latched_align_sign * 0.055 * cube_z
 
             # Handover zone (between both arms)
             handover_pos = env.scene.env_origins + torch.tensor([[0.30, 0.0, 0.20]], device=args_cli.device)
@@ -490,7 +491,7 @@ def main():
                 commanded_left = commanded_left + torch.clamp(left_standby_joints - commanded_left, min=-0.04, max=0.04)
                 # Close right gripper tightly around baton
                 right_gripper_cmd = -1.0
-                if phase_timer > 25:
+                if phase_timer > 90:
                     if right_gripper_width > 0.025:
                         print(f"  [Right Grasp Verified!] Step {step:03d} | Width: {right_gripper_width*1000:.1f}mm")
                         
@@ -504,7 +505,7 @@ def main():
                     else:
                         print(f"  [Right Grasp Missed!] Step {step:03d} | Width: {right_gripper_width*1000:.1f}mm < 25mm. Retrying descend...")
                         right_gripper_cmd = 1.0
-                        if phase_timer > 40:
+                        if phase_timer > 130:
                             phase = PHASE_RIGHT_DESCEND
                             phase_timer = 0
 
@@ -601,7 +602,7 @@ def main():
                 delta_r_rot = torch.zeros((1, 3), device=args_cli.device)
                 # Left arm closes gripper
                 left_gripper_cmd = -1.0
-                if phase_timer > 35:
+                if phase_timer > 90:
                     if left_gripper_width > 0.025:
                         print(f"  [Left Grasp Verified!] Step {step:03d} | Width: {left_gripper_width*1000:.1f}mm")
                         latched_left_grasp_offset = tcp_pos_l - obj_pos
@@ -610,7 +611,7 @@ def main():
                     else:
                         print(f"  [Left Grasp Missed!] Step {step:03d} | Width: {left_gripper_width*1000:.1f}mm < 25mm. Retrying...")
                         left_gripper_cmd = 1.0
-                        if phase_timer > 50:
+                        if phase_timer > 130:
                             phase = PHASE_LEFT_APPROACH
                             phase_timer = 0
 

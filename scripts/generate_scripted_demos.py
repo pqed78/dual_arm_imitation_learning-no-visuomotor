@@ -360,6 +360,7 @@ def main():
         latched_cube_z = None
         target_cube_z = None
         target_cube_z_for_wrist = None
+        latched_left_grasp_offset = None
 
         ep_obs = []
         ep_actions = []
@@ -457,7 +458,7 @@ def main():
                 dist_z = torch.abs(hover_tgt[:, 2] - tcp_pos_r[:, 2])
                 step_size = min(0.012, dist.item())
                 delta_r_pos = (err / (dist + 1e-6)) * step_size
-                delta_r_rot = compute_desired_grasp_rot(wrist_quat_r, latched_cube_z)
+                delta_r_rot = compute_desired_grasp_rot(wrist_quat_r, latched_align_sign * latched_cube_z, directed=True)
                 if (dist_xy < 0.025 and dist_z < 0.03) or phase_timer > 90:
                     phase = PHASE_RIGHT_DESCEND
                     phase_timer = 0
@@ -474,7 +475,7 @@ def main():
                 dist_z = torch.abs(descend_tgt[:, 2] - tcp_pos_r[:, 2])
                 step_size = min(0.012, dist.item())
                 delta_r_pos = (err / (dist + 1e-6)) * step_size
-                delta_r_rot = compute_desired_grasp_rot(wrist_quat_r, latched_cube_z, gain=0.2, max_rot_step=0.020)
+                delta_r_rot = compute_desired_grasp_rot(wrist_quat_r, latched_align_sign * latched_cube_z, gain=0.2, max_rot_step=0.020, directed=True)
                 reached = (dist_xy < 0.010 and dist_z < 0.005)
                 if reached or phase_timer > 160:
                     if reached:
@@ -495,7 +496,7 @@ def main():
                         
                         w, x, y, z = wrist_quat_r[:, 0], wrist_quat_r[:, 1], wrist_quat_r[:, 2], wrist_quat_r[:, 3]
                         x_curr = torch.stack([1.0 - 2.0 * (y * y + z * z), 2.0 * (x * y + w * z), 2.0 * (x * z - w * y)], dim=-1)
-                        latched_wrist_sign = torch.sign(torch.sum(x_curr * latched_cube_z, dim=-1)).clone()
+                        latched_wrist_sign = latched_align_sign.clone()
                         target_cube_z_for_wrist = latched_wrist_sign * target_cube_z
                         
                         phase = PHASE_RIGHT_LIFT
@@ -508,8 +509,14 @@ def main():
                             phase_timer = 0
 
             elif phase == PHASE_RIGHT_LIFT:
-                # Left arm holds standby
-                commanded_left = commanded_left + torch.clamp(left_standby_joints - commanded_left, min=-0.04, max=0.04)
+
+                # Left arm pre-moves to handover wait position to save time
+                err_l = left_wait_pos - tcp_pos_l
+                dist_l = torch.norm(err_l)
+                step_size_l = min(0.012, dist_l.item())
+                delta_l_pos = (err_l / (dist_l + 1e-6)) * step_size_l
+                left_orient_target = -torch.sign(target_cube_z[:, 1:2] + 1e-6) * target_cube_z
+                delta_l_rot = compute_desired_grasp_rot(wrist_quat_l, left_orient_target, directed=True)
                 # Lift to stable handover height Z = 0.18m with locked horizontal orientation
                 lift_tgt = pick_target.clone()
                 lift_tgt[:, 2] = 0.18
@@ -517,7 +524,7 @@ def main():
                 dist = torch.norm(err)
                 step_size = min(0.012, dist.item())
                 delta_r_pos = (err / (dist + 1e-6)) * step_size
-                delta_r_rot = compute_desired_grasp_rot(wrist_quat_r, latched_cube_z, gain=0.2, max_rot_step=0.020)
+                delta_r_rot = compute_desired_grasp_rot(wrist_quat_r, latched_align_sign * latched_cube_z, gain=0.2, max_rot_step=0.020, directed=True)
                 if dist < 0.025 or phase_timer > 70:
                     phase = PHASE_RIGHT_HANDOVER
                     phase_timer = 0
@@ -534,10 +541,13 @@ def main():
                 # Extremely slow and smooth rotation to prevent inertial shaking of the 25cm baton
                 delta_r_rot = compute_desired_grasp_rot(wrist_quat_r, target_cube_z_for_wrist, gain=0.1, max_rot_step=0.020, directed=True)
 
-                # Left arm stays in safe standby posture while right arm completes handover setup
-                commanded_left = commanded_left + torch.clamp(left_standby_joints - commanded_left, min=-0.04, max=0.04)
-                delta_l_pos = torch.zeros((1, 3), device=args_cli.device)
-                delta_l_rot = torch.zeros((1, 3), device=args_cli.device)
+                # Left arm pre-moves to handover wait position to save time
+                err_l = left_wait_pos - tcp_pos_l
+                dist_l = torch.norm(err_l)
+                step_size_l = min(0.012, dist_l.item())
+                delta_l_pos = (err_l / (dist_l + 1e-6)) * step_size_l
+                left_orient_target = -torch.sign(target_cube_z[:, 1:2] + 1e-6) * target_cube_z
+                delta_l_rot = compute_desired_grasp_rot(wrist_quat_l, left_orient_target, directed=True)
 
                 # Wait until BOTH position and orientation (90-degree twist) are fully reached
                 # Orientation is aligned when the right wrist's local X-axis is strictly parallel to target_cube_z_for_wrist
@@ -594,6 +604,7 @@ def main():
                 if phase_timer > 35:
                     if left_gripper_width > 0.025:
                         print(f"  [Left Grasp Verified!] Step {step:03d} | Width: {left_gripper_width*1000:.1f}mm")
+                        latched_left_grasp_offset = tcp_pos_l - obj_pos
                         phase = PHASE_RIGHT_RELEASE
                         phase_timer = 0
                     else:
@@ -658,19 +669,21 @@ def main():
             elif phase == PHASE_LEFT_HOVER_TARGET:
                 # Right arm stays safely parked in right standby posture
                 commanded_right = commanded_right + torch.clamp(right_standby_joints - commanded_right, min=-0.04, max=0.04)
-                # Left arm carries baton to hover 12cm above red target marker
-                # Apply grasp offset so the baton's center aligns with the target's center
-                final_place_target = target_pos + latched_align_sign * 0.055 * target_cube_z
+                # Manual tuning to compensate for physical drop/slip offset (pull back from +X, +Y)
+                manual_offset = torch.tensor([[-0.08, -0.08, 0.0]], device=args_cli.device)
+                final_place_target = target_pos + latched_left_grasp_offset + manual_offset
                 tgt_hover = final_place_target.clone()
                 tgt_hover[:, 2] = target_pos[:, 2] + 0.12
                 err = tgt_hover - tcp_pos_l
                 dist = torch.norm(err)
-                step_size = min(0.012, dist.item())
+                step_size = min(0.016, dist.item())
                 delta_l_pos = (err / (dist + 1e-6)) * step_size
                 # Locked fixed horizontal orientation to eliminate rotational jitter/slipping
                 left_orient_target = -torch.sign(target_cube_z[:, 1:2] + 1e-6) * target_cube_z
-                delta_l_rot = compute_desired_grasp_rot(wrist_quat_l, left_orient_target, gain=0.2, max_rot_step=0.020, directed=True)
-                if dist < 0.03 or phase_timer > 70:
+                delta_l_rot = compute_desired_grasp_rot(wrist_quat_l, left_orient_target, gain=0.10, max_rot_step=0.010, directed=True)
+                dist_xy = torch.norm(tgt_hover[:, :2] - tcp_pos_l[:, :2])
+                dist_z = torch.abs(tgt_hover[:, 2] - tcp_pos_l[:, 2])
+                if (dist_xy < 0.01 and dist_z < 0.015) or phase_timer > 70:
                     phase = PHASE_LEFT_LOWER_TARGET
                     phase_timer = 0
 
@@ -678,16 +691,17 @@ def main():
                 # Right arm stays safely parked in right standby posture
                 commanded_right = commanded_right + torch.clamp(right_standby_joints - commanded_right, min=-0.04, max=0.04)
                 # Gently lower baton onto target (Z=0.022m, soft landing 2mm above table surface)
-                final_place_target = target_pos + latched_align_sign * 0.055 * target_cube_z
+                manual_offset = torch.tensor([[-0.08, -0.08, 0.0]], device=args_cli.device)
+                final_place_target = target_pos + latched_left_grasp_offset + manual_offset
                 tgt_lower = final_place_target.clone()
                 tgt_lower[:, 2] = 0.022
                 err = tgt_lower - tcp_pos_l
                 dist = torch.norm(err)
                 dist_z = torch.abs(tgt_lower[:, 2] - tcp_pos_l[:, 2])
-                step_size = min(0.012, dist.item())
+                step_size = min(0.008, dist.item())
                 delta_l_pos = (err / (dist + 1e-6)) * step_size
                 left_orient_target = -torch.sign(target_cube_z[:, 1:2] + 1e-6) * target_cube_z
-                delta_l_rot = compute_desired_grasp_rot(wrist_quat_l, left_orient_target, gain=0.2, max_rot_step=0.020, directed=True)
+                delta_l_rot = compute_desired_grasp_rot(wrist_quat_l, left_orient_target, gain=0.10, max_rot_step=0.010, directed=True)
                 if (dist < 0.015 or dist_z < 0.006) or phase_timer > 60:
                     phase = PHASE_LEFT_RELEASE
                     phase_timer = 0
@@ -756,6 +770,12 @@ def main():
             if torch.norm(delta_l_pose) > 1e-5:
                 j_l_wrist = jacobians[:, jacobi_left_hand_idx, :6, :][:, :, jacobi_left_joint_ids]
                 j_l_tcp = get_tcp_jacobian(j_l_wrist, wrist_pos_l, tcp_pos_l)
+                
+                # Dynamic task-space relaxation: Free the wrist orientation during flight to maximize reach
+                if phase == PHASE_LEFT_HOVER_TARGET:
+                    j_l_tcp = j_l_tcp.clone()
+                    j_l_tcp[:, 3:6, :] = 0.0
+                    
                 dq_l = solve_pose_dls_ik(
                     j_l_tcp,
                     delta_l_pose,

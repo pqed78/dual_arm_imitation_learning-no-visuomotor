@@ -86,8 +86,11 @@ class DualArmILEnvCfg(DualArmEnvCfg):
                 restitution_combine_mode="min",
             )
 
-        # 5. Move placement target closer to left arm to prevent unreachable IK poses
-        # Original pos was (0.5, 0.5) + offset (0.1, 0.2). This pushes it to Y=0.7~0.9 which is out of reach.
-        # Moving nominal pos to (0.4, 0.1) makes final pos X=0.5~0.6, Y=0.3~0.5 (perfect for left arm).
+        # 5. Set target base position to (0.5, 0.5) and update random offset range (Final X,Y: 0.3~0.7)
         if hasattr(self.scene, "target") and hasattr(self.scene.target, "init_state"):
-            self.scene.target.init_state.pos = (0.4, 0.1, 0.001)
+            self.scene.target.init_state.pos = (0.5, 0.5, 0.001)
+            if hasattr(self.scene.target, "spawn") and hasattr(self.scene.target.spawn, "radius"):
+                self.scene.target.spawn.radius = 0.125
+
+        if hasattr(self, "events") and hasattr(self.events, "reset_target"):
+            self.events.reset_target.params["pose_range"] = {"x": (-0.2, 0.2), "y": (-0.2, 0.2), "z": (0.0, 0.0)}

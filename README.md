@@ -27,7 +27,7 @@ It supports the entire pipeline, from teleoperation demonstration data collectio
 │   └── act/                   # CVAE + Transformer ACT (Zhao et al. 2023)
 ├── scripts/                   # Execution scripts
 │   ├── generate_scripted_demos.py  # [Recommended] Script-based high-quality single demo auto-generator
-│   ├── generate_scripted_demos2.py # [Highly Recommended] Large-scale tensor parallelized ultra-fast auto-generator
+
 │   ├── replay_demos.py         # Verify collected HDF5 demos via simulation replay
 │   ├── train.py               # Integrated high-speed GPU training script for the 3 algorithms
 │   └── eval.py                # Policy rollout evaluation in Isaac Sim environment
@@ -62,18 +62,9 @@ To intuitively control both arms (14 DoF + 2 grippers), an **Active-Arm Toggle (
 
 ## 3. Step-by-Step Usage Guide
 
-### ① Step 1: Demo Data Collection (Choose 1 of 3 methods)
+### ① Step 1: Demo Data Collection (Choose 1 of 2 methods)
 
-#### [Method A: Highly Recommended] Large-scale Tensor Parallelized Demo Auto-generator (`generate_scripted_demos2.py`)
-Parallelizes Inverse Kinematics (IK) solvers and State Machines 100% via PyTorch GPU tensor operations, acting as an **ultra-fast pipeline where dozens of robots simultaneously generate different demos with zero bottleneck.**
-It includes the most advanced patches, such as wrist singularity prevention, wait time optimization, and automatic baton drop detection.
-
-```bash
-# 50 robots collect 50 demos in a single episode playback (just a few seconds)!
-python scripts/generate_scripted_demos2.py --num_demos=50 --num_envs=50 --headless
-```
-
-#### [Method B] Script-based Single Demo Auto-generator (`generate_scripted_demos.py`)
+#### [Method A] Script-based Single Demo Auto-generator (`generate_scripted_demos.py`)
 Generates perfect, high-quality demos sequentially using a single robot when debugging or visual confirmation is needed. (Wait time optimization patch applied)
 
 ```bash
@@ -81,7 +72,7 @@ Generates perfect, high-quality demos sequentially using a single robot when deb
 python scripts/generate_scripted_demos.py --num_demos=50
 ```
 
-#### [Method C] Manual Keyboard Teleoperation Collection (`collect_demos.py`)
+#### [Method B] Manual Keyboard Teleoperation Collection (`collect_demos.py`)
 Launches the Isaac Sim GUI and allows manual recording of successful episodes by controlling the robot directly with a keyboard.
 
 ```bash
@@ -177,7 +168,7 @@ Isaac Sim 환경에서의 텔레오퍼레이션(수동 조작) 시연 데이터 
 │   └── act/                   # CVAE + Transformer ACT (Zhao et al. 2023)
 ├── scripts/                   # 실행 스크립트
 │   ├── generate_scripted_demos.py  # [추천] 스크립트 기반 고품질 단일 데모 자동 생성기
-│   ├── generate_scripted_demos2.py # [강력 추천] 대규모 텐서 병렬화 초고속 자동 생성기
+
 │   ├── replay_demos.py         # 수집된 HDF5 데모 시뮬레이션 재생 검증
 │   ├── train.py               # 3종 알고리즘 통합 고속 GPU 학습 스크립트
 │   └── eval.py                # Isaac Sim 환경에서 정책 롤아웃 평가
@@ -212,18 +203,9 @@ Isaac Sim 환경에서의 텔레오퍼레이션(수동 조작) 시연 데이터 
 
 ## 3. 사용 단계별 가이드
 
-### ① 1단계: 데모 데이터 수집 (3가지 방법 중 선택)
+### ① 1단계: 데모 데이터 수집 (2가지 방법 중 선택)
 
-#### [방법 A: 강력 추천] 대규모 텐서 병렬화 데모 자동 생성기 (`generate_scripted_demos2.py`)
-역운동학(IK) 솔버와 상태 기계(State Machine)를 100% PyTorch GPU 텐서 연산으로 병렬화하여, **수십 대의 로봇이 동시에 각기 다른 데모를 0초의 병목 없이 쏟아내는 초고속 파이프라인**입니다.
-손목 특이점(Singularity) 방지, 대기 시간 최적화, Baton 드롭 자동 감지 등 가장 진보된 패치가 모두 적용되어 있습니다.
-
-```bash
-# 50대의 로봇이 50개의 데모를 단 한 번의 에피소드 재생(수 초)만에 수집!
-python scripts/generate_scripted_demos2.py --num_demos=50 --num_envs=50 --headless
-```
-
-#### [방법 B] 스크립트 기반 단일 데모 자동 생성기 (`generate_scripted_demos.py`)
+#### [방법 A] 스크립트 기반 단일 데모 자동 생성기 (`generate_scripted_demos.py`)
 디버깅이나 시각적 확인이 필요할 때 1대의 로봇이 순차적으로 완벽한 고품질 데모를 생성합니다. (대기 시간 최적화 패치 적용 완료)
 
 ```bash
@@ -231,7 +213,7 @@ python scripts/generate_scripted_demos2.py --num_demos=50 --num_envs=50 --headle
 python scripts/generate_scripted_demos.py --num_demos=50
 ```
 
-#### [방법 C] 키보드 텔레오퍼레이션 수동 수집 (`collect_demos.py`)
+#### [방법 B] 키보드 텔레오퍼레이션 수동 수집 (`collect_demos.py`)
 Isaac Sim GUI를 띄우고 직접 키보드로 조작하여 성공 에피소드를 수동 녹화합니다.
 
 ```bash

@@ -389,3 +389,33 @@ class VisuomotorSceneCfg(DualArmSceneCfg):
 
 - 본 폴더(`dual_arm_il_visuo`)의 모든 코드는 `/home/optimus/isaac_lab/dual_arm0`의 파일을 수정하지 않습니다.
 - 시뮬레이션 씬(`DualArmSceneCfg`) 및 로봇 정의는 환경에 설치된 설정을 안전하게 상속(`configs/env_cfg.py`)받아 재사용하므로, RL 쪽에서 현재 진행 중인 학습이나 튜닝에 아무런 간섭을 주지 않습니다.
+
+---
+
+## 6. Antigravity AI 자동 생성 프롬프트 (재구축용)
+
+나중에 다른 프로젝트나 새로운 환경에서 지금과 **똑같은 Visuomotor 모방 학습 환경을 에러 없이 한 번에 자동 생성**하고 싶다면, Antigravity AI에게 아래 프롬프트를 그대로 복사해서 붙여넣으세요. 이 프롬프트 안에는 우리가 겪었던 Isaac Lab의 까다로운 환경 스폰 규칙과 Python 모듈 충돌 방지 노하우가 모두 담겨 있습니다.
+
+> **[복사할 프롬프트 시작]**
+> Isaac Lab 기반의 양팔 로봇(Dual Arm)을 위한 독립적인 Visuomotor 모방 학습(Imitation Learning) 프로젝트를 구축해 줘. 
+> 
+> 다음의 아키텍처 원칙과 Isaac Lab의 매우 중요한 규칙들을 반드시 준수해서 코드를 작성해 줘:
+> 
+> 1. **씬(Scene) 및 카메라 스폰 규칙 (가장 중요)**: 
+>    `configs/env_cfg.py`에서 기존 `DualArmSceneCfg`를 상속받는 `VisuomotorSceneCfg`를 만들고, `@configclass` 데이터클래스 필드로서 `front_camera: CameraCfg`를 명시적으로 선언해 줘. (절대 `__post_init__` 내부에서 `self.scene.front_camera` 형태로 동적 할당하지 말 것! Isaac Lab의 InteractiveScene이 카메라를 인식하지 못하고 스폰을 누락시킴).
+> 
+> 2. **관측치(Observation) 설정**:
+>    `VisuomotorObsCfg`는 `ObservationManagerCfg`를 상속받지 말고 단독 `@configclass`로 작성해 줘. 내부에 `image` (카메라) 그룹과 `policy` (Proprioception: joint 및 TCP) 그룹을 포함시켜야 해. 그리고 이 관측치 설정을 `DualArmILEnvCfg`의 클래스 레벨 필드로 지정해 줘.
+> 
+> 3. **독립적인 환경 레지스트리 강제 등록**:
+>    기존 RL 환경(`dual_arm0`) 설정이 오버라이드 되는 것을 막기 위해, 모든 실행 스크립트(`generate_scripted_demos.py`, `eval.py`, `collect_demos.py`)의 최상단에서 `gym.register`를 사용하여 `"Isaac-Dual-Arm-IL-v0"`라는 완전히 새로운 ID를 등록해. 이때 `kwargs={"env_cfg_entry_point": DualArmILEnvCfg}`를 반드시 전달하고, `gym.make` 호출 시에도 이 새로운 ID를 사용해 줘.
+> 
+> 4. **로컬 모듈 임포트 강제 (Shadowing 방지)**:
+>    설정 파일 등을 임포트할 때 절대 `try... except ModuleNotFoundError` 블록을 사용해서 예전 `dual_arm_il` 패키지를 임포트하려고 시도하지 마. 사용자의 시스템에 예전 버전이 pip로 설치되어 있을 경우 로컬 코드의 수정사항이 완전히 무시되는 Shadowing 현상이 발생해. 무조건 로컬 임포트(`from configs.env_cfg import DualArmILEnvCfg`)만 사용해 줘.
+> 
+> 5. **비전 인코더 구현**:
+>    `models/vision_encoder.py`를 만들고, 입력 이미지를 처리하는 다목적 Vision Encoder를 PyTorch로 작성해 줘. `backbone_type` 파라미터를 통해 `resnet18`, `resnet50`, `mobilenet_v3_small`, `efficientnet_b0`, `vit_b_16`를 동적으로 스왑할 수 있어야 해. (ViT 모델을 위해 이미지가 224x224로 자동 리사이징 되도록 처리해 줘).
+> 
+> 6. **스크립트 기반 고품질 데모 생성기**:
+>    `generate_scripted_demos.py`를 작성하여 DLS IK(역운동학)를 이용해 부드러운 양팔 궤적(Pick & Place)을 자동으로 생성하고 HDF5로 저장하도록 해 줘. 에피소드 저장 시에는 반드시 `image` 관측치 데이터도 함께 저장해야 해.
+> **[복사할 프롬프트 끝]**

@@ -57,6 +57,7 @@ def parse_args():
     parser.add_argument("--lr", type=float, default=None, help="Override learning rate.")
     parser.add_argument("--device", type=str, default="cuda:0" if torch.cuda.is_available() else "cpu")
     parser.add_argument("--seed", type=int, default=42, help="Random seed.")
+    parser.add_argument("--resume", type=str, default=None, help="Path to a checkpoint file to resume training from.")
     return parser.parse_args()
 
 
@@ -178,6 +179,13 @@ def main():
     # Instantiate Model
     model = build_model(args.algo, cfg, full_dataset.obs_dim, full_dataset.act_dim)
     model.to(args.device)
+    
+    if args.resume:
+        if os.path.exists(args.resume):
+            print(f"[Model] Resuming training from checkpoint: {args.resume}")
+            model.load_state_dict(torch.load(args.resume, map_location=args.device, weights_only=True))
+        else:
+            print(f"[Warning] Checkpoint not found: {args.resume}. Starting from scratch.")
 
     total_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
     print(f"[Model] {args.algo.upper()} created with {total_params:,} trainable parameters.")

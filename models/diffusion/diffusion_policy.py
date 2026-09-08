@@ -24,6 +24,8 @@ def cosine_beta_schedule(timesteps: int, s: float = 0.008) -> torch.Tensor:
     return torch.clip(betas, 0.0001, 0.9999)
 
 
+from models.vision_encoder import VisionEncoder
+
 class DiffusionPolicy(nn.Module):
     """Diffusion Policy model supporting training and fast closed-loop inference."""
 
@@ -45,9 +47,11 @@ class DiffusionPolicy(nn.Module):
         self.pred_horizon = pred_horizon
         self.obs_horizon = obs_horizon
         self.num_train_timesteps = num_train_timesteps
+        
+        self.vision_encoder = VisionEncoder(feature_dim=512)
 
-        # Global conditioning dimension = obs_horizon * obs_dim
-        self.cond_dim = obs_horizon * obs_dim
+        # Global conditioning dimension = obs_horizon * (obs_dim + 512)
+        self.cond_dim = obs_horizon * (obs_dim + 512)
 
         # 1D Temporal UNet backbone
         self.model = ConditionalUnet1D(
@@ -86,14 +90,20 @@ class DiffusionPolicy(nn.Module):
         Args:
             batch: dict with:
                 "obs": (B, obs_horizon, obs_dim)
+                "rgb_image": (B, obs_horizon, C, H, W)
                 "action": (B, pred_horizon, act_dim)
         """
         obs_seq = batch["obs"]
+        img_seq = batch["rgb_image"]
         act_seq = batch["action"]
         batch_size = act_seq.shape[0]
 
+        # Extract vision features
+        img_features = self.vision_encoder(img_seq) # (B, obs_horizon, 512)
+        combined_obs = torch.cat([obs_seq, img_features], dim=-1)
+
         # Flatten observation history into single conditioning vector
-        global_cond = obs_seq.reshape(batch_size, -1)
+        global_cond = combined_obs.reshape(batch_size, -1)
 
         # Sample random timesteps
         timesteps = torch.randint(
@@ -119,6 +129,7 @@ class DiffusionPolicy(nn.Module):
     def predict_action(
         self,
         obs_seq: torch.Tensor,
+        img_seq: torch.Tensor,
         num_inference_steps: int = 15,
         use_ddim: bool = True,
     ) -> torch.Tensor:
@@ -126,6 +137,7 @@ class DiffusionPolicy(nn.Module):
 
         Args:
             obs_seq: (B, obs_horizon, obs_dim) or (obs_horizon, obs_dim)
+            img_seq: (B, obs_horizon, C, H, W) or (obs_horizon, C, H, W)
             num_inference_steps: Number of sampling steps (fast DDIM acceleration)
             use_ddim: Whether to use DDIM (fast) or standard DDPM
         Returns:
@@ -133,10 +145,13 @@ class DiffusionPolicy(nn.Module):
         """
         if obs_seq.dim() == 2:
             obs_seq = obs_seq.unsqueeze(0)
+            img_seq = img_seq.unsqueeze(0)
         batch_size = obs_seq.shape[0]
         device = obs_seq.device
 
-        global_cond = obs_seq.reshape(batch_size, -1)
+        img_features = self.vision_encoder(img_seq)
+        combined_obs = torch.cat([obs_seq, img_features], dim=-1)
+        global_cond = combined_obs.reshape(batch_size, -1)
 
         # Start from pure Gaussian noise
         x = torch.randn((batch_size, self.pred_horizon, self.act_dim), device=device)

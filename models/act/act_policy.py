@@ -13,6 +13,8 @@ import torch.nn.functional as F
 from .transformer import ACTTransformer
 
 
+from models.vision_encoder import VisionEncoder
+
 class ACTPolicy(nn.Module):
     """CVAE + Transformer Action Chunking Policy."""
 
@@ -41,10 +43,13 @@ class ACTPolicy(nn.Module):
         self.d_model = d_model
         self.temporal_ensembling = temporal_ensembling
         self.temporal_ensemble_coeff = temporal_ensemble_coeff
+        
+        self.vision_encoder = VisionEncoder(feature_dim=512)
+        in_dim = obs_dim + 512
 
         # --- CVAE Encoder (Obs + Action Chunk -> Latent z) ---
         self.cls_token = nn.Parameter(torch.randn(1, 1, d_model))
-        self.obs_proj_enc = nn.Linear(obs_dim, d_model)
+        self.obs_proj_enc = nn.Linear(in_dim, d_model)
         self.act_proj_enc = nn.Linear(act_dim, d_model)
 
         cvae_encoder_layer = nn.TransformerEncoderLayer(
@@ -59,7 +64,7 @@ class ACTPolicy(nn.Module):
         self.latent_proj = nn.Linear(d_model, latent_dim * 2)  # mu and logvar
 
         # --- Decoder (Obs + Latent z -> Action Chunk) ---
-        self.obs_proj_dec = nn.Linear(obs_dim, d_model)
+        self.obs_proj_dec = nn.Linear(in_dim, d_model)
         self.latent_proj_dec = nn.Linear(latent_dim, d_model)
 
         # Learnable action sequence query tokens
@@ -85,19 +90,15 @@ class ACTPolicy(nn.Module):
         """Reset the temporal ensembling action buffer."""
         self.ensemble_buffer = {}  # maps future timestep t -> list of (predicted_action, weight)
 
-    def encode(self, obs: torch.Tensor, actions: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
-        """Encode demonstration trajectory into latent style distribution.
-
-        Args:
-            obs: (B, obs_dim)
-            actions: (B, chunk_size, act_dim)
-        Returns:
-            mu, logvar: (B, latent_dim)
-        """
+    def encode(self, obs: torch.Tensor, img: torch.Tensor, actions: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+        """Encode demonstration trajectory into latent style distribution."""
         batch_size = obs.shape[0]
 
+        img_features = self.vision_encoder(img)
+        combined_obs = torch.cat([obs, img_features], dim=-1)
+
         cls = self.cls_token.expand(batch_size, -1, -1)  # (B, 1, d_model)
-        obs_tok = self.obs_proj_enc(obs).unsqueeze(1)    # (B, 1, d_model)
+        obs_tok = self.obs_proj_enc(combined_obs).unsqueeze(1)    # (B, 1, d_model)
         act_tok = self.act_proj_enc(actions)             # (B, chunk_size, d_model)
 
         seq = torch.cat([cls, obs_tok, act_tok], dim=1)  # (B, 2 + chunk_size, d_model)
@@ -117,22 +118,14 @@ class ACTPolicy(nn.Module):
     def forward(
         self,
         obs: torch.Tensor,
+        img: torch.Tensor,
         actions: torch.Tensor | None = None,
     ) -> tuple[torch.Tensor, torch.Tensor | None, torch.Tensor | None]:
-        """Forward pass.
-
-        Args:
-            obs: (B, obs_dim)
-            actions: (B, chunk_size, act_dim) when training, None during inference
-        Returns:
-            pred_actions: (B, chunk_size, act_dim)
-            mu, logvar: (B, latent_dim) or (None, None)
-        """
         batch_size = obs.shape[0]
 
         if actions is not None:
             # Training mode: sample z from encoder
-            mu, logvar = self.encode(obs, actions)
+            mu, logvar = self.encode(obs, img, actions)
             z = self.reparameterize(mu, logvar)
         else:
             # Inference mode: set latent z to prior mean (0)
@@ -140,7 +133,9 @@ class ACTPolicy(nn.Module):
             z = torch.zeros((batch_size, self.latent_dim), device=obs.device, dtype=obs.dtype)
 
         # Prepare Decoder inputs: Condition tokens [obs, z]
-        obs_tok = self.obs_proj_dec(obs).unsqueeze(1)       # (B, 1, d_model)
+        img_features = self.vision_encoder(img)
+        combined_obs = torch.cat([obs, img_features], dim=-1)
+        obs_tok = self.obs_proj_dec(combined_obs).unsqueeze(1)       # (B, 1, d_model)
         z_tok = self.latent_proj_dec(z).unsqueeze(1)        # (B, 1, d_model)
         context = torch.cat([obs_tok, z_tok], dim=1)        # (B, 2, d_model)
 
@@ -154,9 +149,10 @@ class ACTPolicy(nn.Module):
     def compute_loss(self, batch: dict[str, torch.Tensor]) -> dict[str, torch.Tensor]:
         """Compute ACT loss: L1/MSE reconstruction + KL divergence."""
         obs = batch["obs"]
+        img = batch["rgb_image"]
         target_actions = batch["action"]
 
-        pred_actions, mu, logvar = self.forward(obs, target_actions)
+        pred_actions, mu, logvar = self.forward(obs, img, target_actions)
 
         # L1 / L2 action reconstruction loss
         recon_loss = F.l1_loss(pred_actions, target_actions)
@@ -176,21 +172,15 @@ class ACTPolicy(nn.Module):
     def predict_action_step(
         self,
         obs: torch.Tensor,
+        img: torch.Tensor,
         current_step: int,
     ) -> torch.Tensor:
-        """Closed-loop inference with optional Temporal Ensembling.
-
-        Args:
-            obs: (obs_dim,) or (1, obs_dim)
-            current_step: Current environment timestep (integer)
-        Returns:
-            action: (act_dim,) action for the immediate current step
-        """
         if obs.dim() == 1:
             obs = obs.unsqueeze(0)
+            img = img.unsqueeze(0)
 
         # Predict fresh chunk of actions for the next chunk_size steps
-        pred_chunk, _, _ = self.forward(obs, actions=None)  # (1, chunk_size, act_dim)
+        pred_chunk, _, _ = self.forward(obs, img, actions=None)  # (1, chunk_size, act_dim)
         chunk_actions = pred_chunk.squeeze(0)                # (chunk_size, act_dim)
 
         if not self.temporal_ensembling:

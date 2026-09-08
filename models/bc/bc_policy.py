@@ -13,6 +13,8 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 
+from models.vision_encoder import VisionEncoder
+
 class MLPBCPolicy(nn.Module):
     """Multi-Layer Perceptron Behavior Cloning Policy."""
 
@@ -27,11 +29,13 @@ class MLPBCPolicy(nn.Module):
         super().__init__()
         self.obs_dim = obs_dim
         self.act_dim = act_dim
+        
+        self.vision_encoder = VisionEncoder(feature_dim=512)
+        in_dim = obs_dim + 512
 
         act_fn = nn.ReLU if activation.lower() == "relu" else nn.GELU
 
         layers = []
-        in_dim = obs_dim
         for h_dim in hidden_dims:
             layers.append(nn.Linear(in_dim, h_dim))
             layers.append(nn.LayerNorm(h_dim))
@@ -43,26 +47,21 @@ class MLPBCPolicy(nn.Module):
         layers.append(nn.Linear(in_dim, act_dim))
         self.net = nn.Sequential(*layers)
 
-    def forward(self, obs: torch.Tensor) -> torch.Tensor:
-        """Predict action given observation.
-
-        Args:
-            obs: (B, obs_dim) or (obs_dim,)
-        Returns:
-            action: (B, act_dim)
-        """
+    def forward(self, obs: torch.Tensor, rgb_image: torch.Tensor) -> torch.Tensor:
         if obs.dim() == 1:
             obs = obs.unsqueeze(0)
-            return self.net(obs).squeeze(0)
-        return self.net(obs)
+            rgb_image = rgb_image.unsqueeze(0)
+            
+        img_features = self.vision_encoder(rgb_image)
+        combined = torch.cat([obs, img_features], dim=-1)
+        
+        out = self.net(combined)
+        if out.shape[0] == 1 and obs.dim() == 1:
+            return out.squeeze(0)
+        return out
 
     def compute_loss(self, batch: dict[str, torch.Tensor]) -> dict[str, torch.Tensor]:
-        """Compute training loss on a batch.
-
-        Args:
-            batch: dict with "obs" (B, obs_dim) and "action" (B, act_dim)
-        """
-        pred_act = self.forward(batch["obs"])
+        pred_act = self.forward(batch["obs"], batch["rgb_image"])
         loss = F.mse_loss(pred_act, batch["action"])
         return {"loss": loss, "mse": loss.detach()}
 
@@ -83,9 +82,12 @@ class RNNBCPolicy(nn.Module):
         self.act_dim = act_dim
         self.hidden_dim = hidden_dim
         self.num_layers = num_layers
+        
+        self.vision_encoder = VisionEncoder(feature_dim=512)
+        in_dim = obs_dim + 512
 
         self.lstm = nn.LSTM(
-            input_size=obs_dim,
+            input_size=in_dim,
             hidden_size=hidden_dim,
             num_layers=num_layers,
             batch_first=True,
@@ -97,25 +99,21 @@ class RNNBCPolicy(nn.Module):
             nn.Linear(hidden_dim // 2, act_dim),
         )
 
-    def forward(self, obs_seq: torch.Tensor, hidden=None) -> tuple[torch.Tensor, tuple]:
-        """Predict action given observation sequence.
-
-        Args:
-            obs_seq: (B, seq_len, obs_dim)
-            hidden: Optional (h_0, c_0)
-        Returns:
-            action: (B, act_dim) for the final timestep
-            hidden: updated (h_n, c_n)
-        """
-        out, hidden = self.lstm(obs_seq, hidden)
+    def forward(self, obs_seq: torch.Tensor, rgb_seq: torch.Tensor, hidden=None) -> tuple[torch.Tensor, tuple]:
+        img_features = self.vision_encoder(rgb_seq) # shape: (B, T, 512)
+        combined = torch.cat([obs_seq, img_features], dim=-1)
+        
+        out, hidden = self.lstm(combined, hidden)
         last_out = out[:, -1, :]  # Take output of last timestep
         action = self.head(last_out)
         return action, hidden
 
     def compute_loss(self, batch: dict[str, torch.Tensor]) -> dict[str, torch.Tensor]:
         obs = batch["obs"]
+        img = batch["rgb_image"]
         if obs.dim() == 2:
             obs = obs.unsqueeze(1)  # (B, 1, obs_dim)
-        pred_act, _ = self.forward(obs)
+            img = img.unsqueeze(1)
+        pred_act, _ = self.forward(obs, img)
         loss = F.mse_loss(pred_act, batch["action"])
         return {"loss": loss, "mse": loss.detach()}

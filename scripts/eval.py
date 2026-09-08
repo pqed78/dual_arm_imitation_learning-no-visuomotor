@@ -36,15 +36,25 @@ parser.add_argument("--max_steps_per_ep", type=int, default=700, help="Max steps
 AppLauncher.add_app_launcher_args(parser)
 args_cli = parser.parse_args()
 
+# FORCE ENABLE CAMERAS for Visuomotor project!
+args_cli.enable_cameras = True
+
 app_launcher = AppLauncher(args_cli)
 simulation_app = app_launcher.app
 
 import gymnasium as gym
 from isaaclab.envs import ManagerBasedRLEnv
-try:
-    from dual_arm_il.configs.env_cfg import DualArmILEnvCfg
-except ModuleNotFoundError:
-    from configs.env_cfg import DualArmILEnvCfg
+from configs.env_cfg import DualArmILEnvCfg
+
+gym.register(
+    id="Isaac-Dual-Arm-IL-v0",
+    entry_point="isaaclab.envs:ManagerBasedRLEnv",
+    disable_env_checker=True,
+    kwargs={
+        "env_cfg_entry_point": DualArmILEnvCfg,
+    },
+)
+
 from dataset.il_dataset import DualArmDataset
 from models import MLPBCPolicy, RNNBCPolicy, DiffusionPolicy, ACTPolicy
 
@@ -108,7 +118,8 @@ def main():
     # Create Environment
     env_cfg = DualArmILEnvCfg()
     env_cfg.sim.device = args_cli.device
-    env: ManagerBasedRLEnv = gym.make("Isaac-Dual-Arm-v0", cfg=env_cfg).unwrapped
+    print("[Eval] Initializing Isaac Lab Environment...")
+    env: ManagerBasedRLEnv = gym.make("Isaac-Dual-Arm-IL-v0", cfg=env_cfg).unwrapped
 
     obs_horizon = cfg.get("obs_horizon", 2)
     act_horizon = cfg.get("act_horizon", 8)

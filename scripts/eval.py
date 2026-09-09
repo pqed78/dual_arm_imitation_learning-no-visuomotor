@@ -118,10 +118,16 @@ def main():
 
     num_success = 0
     total_episodes = args_cli.num_episodes
+    success_rate = 0.0
+
+    from concurrent.futures import ThreadPoolExecutor
+    executor = ThreadPoolExecutor(max_workers=1)
 
     print(f"\nStarting {total_episodes} evaluation episodes...\n")
 
     for ep_idx in range(1, total_episodes + 1):
+        future = None
+        step_at_request = 0
         obs, _ = env.reset()
         if hasattr(model, "reset_temporal_ensemble"):
             model.reset_temporal_ensemble()
@@ -151,14 +157,38 @@ def main():
                     while len(obs_queue) < obs_horizon:
                         obs_queue.append(norm_obs)
 
-                    if len(action_queue) == 0:
-                        obs_tensor = torch.stack(list(obs_queue), dim=0).unsqueeze(0)  # (1, To, obs_dim)
-                        pred_act_chunk = model.predict_action(obs_tensor, num_inference_steps=15)
-                        pred_act_chunk = pred_act_chunk.squeeze(0)  # (Tp, act_dim)
-
-                        # Enqueue first act_horizon actions
+                    # 1. Initial synchronous compute if everything is empty
+                    if len(action_queue) == 0 and future is None:
+                        obs_tensor = torch.stack(list(obs_queue), dim=0).unsqueeze(0)
+                        infer_steps = model.num_train_timesteps
+                        pred_act_chunk = model.predict_action(obs_tensor, num_inference_steps=infer_steps, use_ddim=False).squeeze(0)
                         for a_idx in range(min(act_horizon, len(pred_act_chunk))):
                             act_unnorm = pred_act_chunk[a_idx] * act_std + act_mean
+                            action_queue.append(act_unnorm)
+
+                    # 2. Trigger background compute right after popping the first action of a new chunk
+                    if len(action_queue) == act_horizon - 1 and future is None:
+                        obs_tensor = torch.stack(list(obs_queue), dim=0).unsqueeze(0)
+                        infer_steps = model.num_train_timesteps
+                        step_at_request = step
+                        future = executor.submit(model.predict_action, obs_tensor, num_inference_steps=infer_steps, use_ddim=False)
+
+                    # 3. If we run out of actions, retrieve the background compute result
+                    if len(action_queue) == 0 and future is not None:
+                        pred_act_chunk = future.result().squeeze(0)
+                        future = None
+                        
+                        # Calculate how many steps have passed in the simulation since we requested this chunk
+                        offset = step - step_at_request
+                        
+                        # Slice the predicted trajectory to match the current physical time!
+                        for a_idx in range(offset, min(offset + act_horizon, len(pred_act_chunk))):
+                            act_unnorm = pred_act_chunk[a_idx] * act_std + act_mean
+                            action_queue.append(act_unnorm)
+
+                        # Fallback in case we reached the end of the chunk
+                        if len(action_queue) == 0:
+                            # Re-use the last action if we somehow miscalculated
                             action_queue.append(act_unnorm)
 
                     action = action_queue.popleft()
@@ -169,6 +199,7 @@ def main():
 
             # Step environment: action shape (1, act_dim)
             action_step = action.unsqueeze(0)
+            print(f"Step {step} | norm_obs: [{norm_obs.min().item():.3f}, {norm_obs.max().item():.3f}] | action[:7]: {action[:7].cpu().numpy().round(3)}")
             obs, reward, terminated, truncated, _ = env.step(action_step)
 
             # Check task success: baton placed near red target
@@ -179,6 +210,17 @@ def main():
             if dist_to_target < 0.12 and obj_pos[2].item() < 0.05:
                 ep_success = True
                 print(f"[Episode {ep_idx}] SUCCESS! Placed at target (dist: {dist_to_target:.3f}m, step: {step})")
+                break
+                
+            # Check for failure 1: Object dropped off the table
+            if obj_pos[2].item() < -0.05:
+                print(f"[Episode {ep_idx}] FAILED: Object dropped off the table (Z: {obj_pos[2].item():.3f}). Early termination.")
+                break
+                
+            # Check for failure 2: Robot spinning out of control (OOD Cascading Error)
+            joint_vel = env.scene["robot"].data.joint_vel.squeeze(0)
+            if torch.any(torch.abs(joint_vel) > 10.0):
+                print(f"[Episode {ep_idx}] FAILED: Robot joint velocity exceeded safety limit (Max Vel: {torch.max(torch.abs(joint_vel)).item():.1f} rad/s). Early termination.")
                 break
 
             if terminated.item() or truncated.item():

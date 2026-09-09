@@ -348,3 +348,10 @@ LLM 프롬프트를 사용하는 것보다 더 빠르고 확실하게 프로젝�
 chmod +x recreate_project.sh
 ./recreate_project.sh
 ```
+
+
+## Pipeline Execution
+You can run the full pipeline (Data Collection -> Training -> Sequential Eval -> Parallel Eval) using the provided bash script:
+```bash
+./run_pipeline.sh
+```

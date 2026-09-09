@@ -63,8 +63,6 @@ def parse_args():
     return parser.parse_args()
 
 
-from torch.utils.tensorboard import SummaryWriter
-
 def load_config(algo: str, custom_cfg_path: str | None) -> dict:
     if custom_cfg_path is None:
         cfg_path = os.path.join(PROJECT_ROOT, "configs", f"{algo}_cfg.yaml")
@@ -206,7 +204,6 @@ def main():
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=epochs, eta_min=1e-6)
 
     best_val_loss = float("inf")
-    global_step = 0
 
     # Training Loop
     for epoch in range(1, epochs + 1):
@@ -227,11 +224,7 @@ def main():
 
             train_loss_sum += loss.item()
             num_train_batches += 1
-            global_step += 1
             pbar.set_postfix({"train_loss": f"{loss.item():.4f}"})
-            
-            # Log step-wise training loss
-            writer.add_scalar("Loss/Train_Step", loss.item(), global_step)
 
         scheduler.step()
         avg_train_loss = train_loss_sum / max(1, num_train_batches)
@@ -256,11 +249,6 @@ def main():
         
         print(f"Epoch {epoch:3d} | Train Loss: {avg_train_loss:.5f} | Val Loss: {avg_val_loss:.5f}")
 
-        # Log epoch-wise metrics to TensorBoard
-        writer.add_scalar("Loss/Train_Epoch", avg_train_loss, epoch)
-        writer.add_scalar("Loss/Val_Epoch", avg_val_loss, epoch)
-        writer.add_scalar("LR", scheduler.get_last_lr()[0], epoch)
-
         # Save Best Checkpoint
         if avg_val_loss < best_val_loss:
             best_val_loss = avg_val_loss
@@ -284,7 +272,6 @@ def main():
             ckpt_path = os.path.join(save_dir, f"checkpoint_epoch_{epoch}.pt")
             torch.save(model.state_dict(), ckpt_path)
 
-    writer.close()
     print("\n[Training Complete]")
     print(f"Best model saved at: {os.path.join(save_dir, 'best_model.pt')}")
     writer.close()

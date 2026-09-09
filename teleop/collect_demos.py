@@ -41,9 +41,6 @@ parser.add_argument(
 AppLauncher.add_app_launcher_args(parser)
 args_cli = parser.parse_args()
 
-# FORCE ENABLE CAMERAS for Visuomotor project!
-args_cli.enable_cameras = True
-
 # Launch Isaac Sim simulator
 app_launcher = AppLauncher(args_cli)
 simulation_app = app_launcher.app
@@ -51,17 +48,12 @@ simulation_app = app_launcher.app
 # Imports after simulation app launch
 import gymnasium as gym
 from isaaclab.envs import ManagerBasedRLEnv
-from configs.env_cfg import DualArmILEnvCfg
-from teleop.dual_arm_teleop import DualArmTeleopController
-
-gym.register(
-    id="Isaac-Dual-Arm-IL-v0",
-    entry_point="isaaclab.envs:ManagerBasedRLEnv",
-    disable_env_checker=True,
-    kwargs={
-        "env_cfg_entry_point": DualArmILEnvCfg,
-    },
-)
+try:
+    from dual_arm_il.configs.env_cfg import DualArmILEnvCfg
+    from dual_arm_il.teleop.dual_arm_teleop import DualArmTeleopController
+except ModuleNotFoundError:
+    from configs.env_cfg import DualArmILEnvCfg
+    from teleop.dual_arm_teleop import DualArmTeleopController
 
 
 def solve_dls_ik(
@@ -116,13 +108,14 @@ def save_episode_to_hdf5(hdf5_path: str, ep_idx: int, observations: list, action
         f["data"].attrs["total"] = total_samples
 
     print(f"[Dataset] Successfully saved demo_{ep_idx} ({len(act_array)} steps) to {hdf5_path}")
-    
-def main():
-    env_cfg = DualArmILEnvCfg()
-    env_cfg.sim.device = args_cli.device
 
-    # Initialize environment
-    env: ManagerBasedRLEnv = gym.make("Isaac-Dual-Arm-IL-v0", cfg=env_cfg).unwrapped
+
+def main():
+    cfg = DualArmILEnvCfg()
+    cfg.sim.device = args_cli.device
+
+    print("[Collect] Initializing Isaac Lab environment...")
+    env: ManagerBasedRLEnv = gym.make("Isaac-Dual-Arm-v0", cfg=cfg).unwrapped
     robot = env.scene["robot"]
 
     # Locate body indices and joint indices

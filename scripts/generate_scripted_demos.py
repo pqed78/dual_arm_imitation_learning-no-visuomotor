@@ -49,25 +49,15 @@ parser.add_argument("--max_steps_per_ep", type=int, default=700, help="Max steps
 AppLauncher.add_app_launcher_args(parser)
 args_cli = parser.parse_args()
 
-# FORCE ENABLE CAMERAS for Visuomotor project!
-args_cli.enable_cameras = True
-
 app_launcher = AppLauncher(args_cli)
 simulation_app = app_launcher.app
 
 import gymnasium as gym
 from isaaclab.envs import ManagerBasedRLEnv
-from configs.env_cfg import DualArmILEnvCfg, VisuomotorObsCfg
-
-# Explicitly register our IL environment with Gym to ensure Isaac Lab's parse_env_cfg uses our config
-gym.register(
-    id="Isaac-Dual-Arm-IL-v0",
-    entry_point="isaaclab.envs:ManagerBasedRLEnv",
-    disable_env_checker=True,
-    kwargs={
-        "env_cfg_entry_point": DualArmILEnvCfg,
-    },
-)
+try:
+    from dual_arm_il.configs.env_cfg import DualArmILEnvCfg
+except ModuleNotFoundError:
+    from configs.env_cfg import DualArmILEnvCfg
 
 
 def solve_pose_dls_ik(
@@ -224,7 +214,7 @@ def compute_tcp(wrist_pos: torch.Tensor, wrist_quat: torch.Tensor) -> tuple[torc
     return tcp_pos, z_dir
 
 
-def save_episode_to_hdf5(hdf5_path: str, ep_idx: int, observations: list, images: list, actions: list, rewards: list):
+def save_episode_to_hdf5(hdf5_path: str, ep_idx: int, observations: list, actions: list, rewards: list):
     os.makedirs(os.path.dirname(os.path.abspath(hdf5_path)), exist_ok=True)
     mode = "a" if os.path.exists(hdf5_path) else "w"
     with h5py.File(hdf5_path, mode) as f:
@@ -232,13 +222,10 @@ def save_episode_to_hdf5(hdf5_path: str, ep_idx: int, observations: list, images
         demo_group = data_group.create_group(f"demo_{ep_idx}")
 
         obs_array = np.array(observations, dtype=np.float32)
-        img_array = np.array(images, dtype=np.uint8)
         act_array = np.array(actions, dtype=np.float32)
         rew_array = np.array(rewards, dtype=np.float32)
 
         demo_group.create_dataset("obs", data=obs_array, compression="gzip")
-        # For images, gzip can be slow, but we'll use it to save disk space
-        demo_group.create_dataset("images", data=img_array, compression="gzip")
         demo_group.create_dataset("actions", data=act_array, compression="gzip")
         demo_group.create_dataset("rewards", data=rew_array, compression="gzip")
         demo_group.attrs["num_samples"] = len(act_array)
@@ -288,11 +275,10 @@ PHASE_SUCCESS = 15
 
 def main():
     cfg = DualArmILEnvCfg()
-    cfg.observations = VisuomotorObsCfg()
     cfg.sim.device = args_cli.device
 
     print("[Scripted Demo] Initializing Isaac Lab Environment...")
-    env: ManagerBasedRLEnv = gym.make("Isaac-Dual-Arm-IL-v0", cfg=cfg).unwrapped
+    env: ManagerBasedRLEnv = gym.make("Isaac-Dual-Arm-v0", cfg=cfg).unwrapped
     robot = env.scene["robot"]
     obj = env.scene["object"]
     target = env.scene["target"]
@@ -377,7 +363,6 @@ def main():
         latched_left_grasp_offset = None
 
         ep_obs = []
-        ep_images = []
         ep_actions = []
         ep_rewards = []
 
@@ -826,13 +811,8 @@ def main():
 
             # Record step transition
             policy_obs = obs["policy"].squeeze(0).detach().cpu().numpy()
-            rgb_image = obs["image"]["rgb"].squeeze(0).detach().cpu().numpy()
-            if rgb_image.dtype != np.uint8:
-                rgb_image = rgb_image.astype(np.uint8)
-
             action_np = action.squeeze(0).detach().cpu().numpy()
             ep_obs.append(policy_obs)
-            ep_images.append(rgb_image)
             ep_actions.append(action_np)
 
             # Step simulation
@@ -847,7 +827,6 @@ def main():
                         args_cli.dataset_file,
                         collected_count,
                         ep_obs,
-                        ep_images,
                         ep_actions,
                         ep_rewards,
                     )

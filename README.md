@@ -399,7 +399,36 @@ class VisuomotorSceneCfg(DualArmSceneCfg):
 > **[복사할 프롬프트 시작]**
 > Isaac Lab 기반의 양팔 로봇(Dual Arm)을 위한 독립적인 Visuomotor 모방 학습(Imitation Learning) 프로젝트를 구축해 줘. 
 > 
-> 다음의 아키텍처 원칙과 Isaac Lab의 매우 중요한 규칙들을 반드시 준수해서 코드를 작성해 줘:
+> 먼저, 반드시 아래와 같이 정확히 동일한 폴더 및 파일 구조로 작성해 줘:
+> 
+> ```text
+> /home/optimus/isaac_lab/dual_arm_il_visuo/
+> ├── README.md
+> ├── requirements.txt
+> ├── configs/
+> │   ├── env_cfg.py
+> │   ├── bc_cfg.yaml
+> │   ├── diffusion_cfg.yaml
+> │   └── act_cfg.yaml
+> ├── teleop/
+> │   ├── dual_arm_teleop.py
+> │   └── collect_demos.py
+> ├── dataset/
+> │   └── il_dataset.py
+> ├── models/
+> │   ├── vision_encoder.py
+> │   ├── bc/
+> │   ├── diffusion/
+> │   └── act/
+> ├── scripts/
+> │   ├── generate_scripted_demos.py
+> │   ├── replay_demos.py
+> │   ├── train.py
+> │   └── eval.py
+> └── data/
+> ```
+> 
+> 다음의 아키텍처 원칙과 Isaac Lab의 매우 중요한 규칙들을 준수해서 위 파일들의 코드를 채워 줘:
 > 
 > 1. **씬(Scene) 및 카메라 스폰 규칙 (가장 중요)**: 
 >    `configs/env_cfg.py`에서 기존 `DualArmSceneCfg`를 상속받는 `VisuomotorSceneCfg`를 만들고, `@configclass` 데이터클래스 필드로서 `front_camera: CameraCfg`를 명시적으로 선언해 줘. (절대 `__post_init__` 내부에서 `self.scene.front_camera` 형태로 동적 할당하지 말 것! Isaac Lab의 InteractiveScene이 카메라를 인식하지 못하고 스폰을 누락시킴).

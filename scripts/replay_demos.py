@@ -65,6 +65,16 @@ def replay_single_demo(env: ManagerBasedRLEnv, actions: list, demo_name: str, de
             tgt_state[:, :3] = torch.tensor(init_states["init_target_pos"], device=env.device)
             tgt_state[:, 3:7] = torch.tensor(init_states["init_target_quat"], device=env.device)
             env.scene["target"].write_root_state_to_sim(tgt_state)
+            
+        if "init_robot_pos" in init_states:
+            rob_state = env.scene["robot"].data.default_root_state.clone()
+            rob_state[:, :3] = torch.tensor(init_states["init_robot_pos"], device=env.device)
+            rob_state[:, 3:7] = torch.tensor(init_states["init_robot_quat"], device=env.device)
+            env.scene["robot"].write_root_state_to_sim(rob_state)
+            
+            j_pos = torch.tensor(init_states["init_robot_joint_pos"], device=env.device).unsqueeze(0)
+            j_vel = torch.tensor(init_states["init_robot_joint_vel"], device=env.device).unsqueeze(0)
+            env.scene["robot"].write_joint_state_to_sim(j_pos, j_vel)
 
     for step_idx, act in enumerate(actions):
         if not simulation_app.is_running():
@@ -117,6 +127,15 @@ def main():
                     "init_object_quat": data_grp[key]["init_object_quat"][:],
                     "init_target_pos": data_grp[key]["init_target_pos"][:],
                     "init_target_quat": data_grp[key]["init_target_quat"][:],
+                }
+            if "init_robot_pos" in data_grp[key]:
+                init_states.update({
+                    "init_robot_pos": data_grp[key]["init_robot_pos"][:],
+                    "init_robot_quat": data_grp[key]["init_robot_quat"][:],
+                    "init_robot_joint_pos": data_grp[key]["init_robot_joint_pos"][:],
+                    "init_robot_joint_vel": data_grp[key]["init_robot_joint_vel"][:],
+                })
+                # Just dummy to not break old code
                 }
             replay_single_demo(env, actions, key, args_cli.delay, init_states)
             time.sleep(1.0)

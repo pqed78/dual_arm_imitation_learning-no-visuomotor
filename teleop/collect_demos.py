@@ -167,6 +167,10 @@ def main():
             "init_object_quat": env.scene["object"].data.root_quat_w.clone().squeeze(0).cpu().numpy(),
             "init_target_pos": env.scene["target"].data.root_pos_w.clone().squeeze(0).cpu().numpy(),
             "init_target_quat": env.scene["target"].data.root_quat_w.clone().squeeze(0).cpu().numpy(),
+            "init_robot_pos": env.scene["robot"].data.root_pos_w.clone().squeeze(0).cpu().numpy(),
+            "init_robot_quat": env.scene["robot"].data.root_quat_w.clone().squeeze(0).cpu().numpy(),
+            "init_robot_joint_pos": env.scene["robot"].data.joint_pos.clone().squeeze(0).cpu().numpy(),
+            "init_robot_joint_vel": env.scene["robot"].data.joint_vel.clone().squeeze(0).cpu().numpy(),
         }
 
         # Commanded joint targets buffer (starts at current joint positions)

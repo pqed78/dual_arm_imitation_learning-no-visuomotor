@@ -62,12 +62,20 @@ def main():
             if len(acts) > max_length:
                 max_length = len(acts)
             if "init_object_pos" in data_grp[key]:
-                all_init_states.append({
+                state_dict = {
                     "init_object_pos": data_grp[key]["init_object_pos"][:],
                     "init_object_quat": data_grp[key]["init_object_quat"][:],
                     "init_target_pos": data_grp[key]["init_target_pos"][:],
                     "init_target_quat": data_grp[key]["init_target_quat"][:],
-                })
+                }
+                if "init_robot_pos" in data_grp[key]:
+                    state_dict.update({
+                        "init_robot_pos": data_grp[key]["init_robot_pos"][:],
+                        "init_robot_quat": data_grp[key]["init_robot_quat"][:],
+                        "init_robot_joint_pos": data_grp[key]["init_robot_joint_pos"][:],
+                        "init_robot_joint_vel": data_grp[key]["init_robot_joint_vel"][:],
+                    })
+                all_init_states.append(state_dict)
             else:
                 all_init_states.append(None)
 
@@ -99,6 +107,22 @@ def main():
                 
         env.scene["object"].write_root_state_to_sim(obj_state)
         env.scene["target"].write_root_state_to_sim(tgt_state)
+        
+        # Override robot states
+        if "init_robot_pos" in all_init_states[0]:
+            rob_state = env.scene["robot"].data.default_root_state.clone()
+            j_pos = env.scene["robot"].data.default_joint_pos.clone()
+            j_vel = env.scene["robot"].data.default_joint_vel.clone()
+            
+            for i, s in enumerate(all_init_states):
+                if s is not None and "init_robot_pos" in s:
+                    rob_state[i, :3] = torch.tensor(s["init_robot_pos"], device=env.device)
+                    rob_state[i, 3:7] = torch.tensor(s["init_robot_quat"], device=env.device)
+                    j_pos[i] = torch.tensor(s["init_robot_joint_pos"], device=env.device)
+                    j_vel[i] = torch.tensor(s["init_robot_joint_vel"], device=env.device)
+                    
+            env.scene["robot"].write_root_state_to_sim(rob_state)
+            env.scene["robot"].write_joint_state_to_sim(j_pos, j_vel)
 
     print(f"\n--- Starting parallel replay (Max steps: {max_length}) ---")
     

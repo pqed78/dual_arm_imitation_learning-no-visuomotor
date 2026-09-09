@@ -100,9 +100,9 @@ def main():
         
         for i, s in enumerate(all_init_states):
             if s is not None:
-                obj_state[i, :3] = torch.tensor(s["init_object_pos"], device=env.device)
+                obj_state[i, :3] = torch.tensor(s["init_object_pos"], device=env.device) + env.scene.env_origins[i]
                 obj_state[i, 3:7] = torch.tensor(s["init_object_quat"], device=env.device)
-                tgt_state[i, :3] = torch.tensor(s["init_target_pos"], device=env.device)
+                tgt_state[i, :3] = torch.tensor(s["init_target_pos"], device=env.device) + env.scene.env_origins[i]
                 tgt_state[i, 3:7] = torch.tensor(s["init_target_quat"], device=env.device)
                 
         env.scene["object"].write_root_state_to_sim(obj_state)
@@ -116,7 +116,7 @@ def main():
             
             for i, s in enumerate(all_init_states):
                 if s is not None and "init_robot_pos" in s:
-                    rob_state[i, :3] = torch.tensor(s["init_robot_pos"], device=env.device)
+                    rob_state[i, :3] = torch.tensor(s["init_robot_pos"], device=env.device) + env.scene.env_origins[i]
                     rob_state[i, 3:7] = torch.tensor(s["init_robot_quat"], device=env.device)
                     j_pos[i] = torch.tensor(s["init_robot_joint_pos"], device=env.device)
                     j_vel[i] = torch.tensor(s["init_robot_joint_vel"], device=env.device)

@@ -56,19 +56,19 @@ def replay_single_demo(env: ManagerBasedRLEnv, actions: list, demo_name: str, de
         # Override object and target initial states
         if "init_object_pos" in init_states:
             obj_state = env.scene["object"].data.default_root_state.clone()
-            obj_state[:, :3] = torch.tensor(init_states["init_object_pos"], device=env.device)
+            obj_state[:, :3] = torch.tensor(init_states["init_object_pos"], device=env.device) + env.scene.env_origins
             obj_state[:, 3:7] = torch.tensor(init_states["init_object_quat"], device=env.device)
             env.scene["object"].write_root_state_to_sim(obj_state)
             
         if "init_target_pos" in init_states:
             tgt_state = env.scene["target"].data.default_root_state.clone()
-            tgt_state[:, :3] = torch.tensor(init_states["init_target_pos"], device=env.device)
+            tgt_state[:, :3] = torch.tensor(init_states["init_target_pos"], device=env.device) + env.scene.env_origins
             tgt_state[:, 3:7] = torch.tensor(init_states["init_target_quat"], device=env.device)
             env.scene["target"].write_root_state_to_sim(tgt_state)
             
         if "init_robot_pos" in init_states:
             rob_state = env.scene["robot"].data.default_root_state.clone()
-            rob_state[:, :3] = torch.tensor(init_states["init_robot_pos"], device=env.device)
+            rob_state[:, :3] = torch.tensor(init_states["init_robot_pos"], device=env.device) + env.scene.env_origins
             rob_state[:, 3:7] = torch.tensor(init_states["init_robot_quat"], device=env.device)
             env.scene["robot"].write_root_state_to_sim(rob_state)
             

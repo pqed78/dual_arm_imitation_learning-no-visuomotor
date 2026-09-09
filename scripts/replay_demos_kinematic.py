@@ -95,7 +95,7 @@ def main():
             j_traj = all_joint_traj[i]
             idx = min(step_idx, len(o_traj) - 1)
             
-            obj_state[i, :3] = torch.tensor(o_traj[idx, :3], device=env.device)
+            obj_state[i, :3] = torch.tensor(o_traj[idx, :3], device=env.device) + env.scene.env_origins[i]
             obj_state[i, 3:7] = torch.tensor(o_traj[idx, 3:7], device=env.device)
             j_pos[i] = torch.tensor(j_traj[idx], device=env.device)
             

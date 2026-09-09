@@ -2269,11 +2269,11 @@ def main():
         obs, _ = env.reset()
 
         init_states = {
-            "init_object_pos": env.scene["object"].data.root_pos_w.clone().squeeze(0).cpu().numpy(),
+            "init_object_pos": (env.scene["object"].data.root_pos_w - env.scene.env_origins).clone().squeeze(0).cpu().numpy(),
             "init_object_quat": env.scene["object"].data.root_quat_w.clone().squeeze(0).cpu().numpy(),
-            "init_target_pos": env.scene["target"].data.root_pos_w.clone().squeeze(0).cpu().numpy(),
+            "init_target_pos": (env.scene["target"].data.root_pos_w - env.scene.env_origins).clone().squeeze(0).cpu().numpy(),
             "init_target_quat": env.scene["target"].data.root_quat_w.clone().squeeze(0).cpu().numpy(),
-            "init_robot_pos": env.scene["robot"].data.root_pos_w.clone().squeeze(0).cpu().numpy(),
+            "init_robot_pos": (env.scene["robot"].data.root_pos_w - env.scene.env_origins).clone().squeeze(0).cpu().numpy(),
             "init_robot_quat": env.scene["robot"].data.root_quat_w.clone().squeeze(0).cpu().numpy(),
             "init_robot_joint_pos": env.scene["robot"].data.joint_pos.clone().squeeze(0).cpu().numpy(),
             "init_robot_joint_vel": env.scene["robot"].data.joint_vel.clone().squeeze(0).cpu().numpy(),
@@ -2749,8 +2749,8 @@ def main():
             ep_obs.append(policy_obs)
             ep_actions.append(action_np)
             
-            import torch
-            obj_pose = torch.cat([env.scene["object"].data.root_pos_w, env.scene["object"].data.root_quat_w], dim=-1).squeeze(0).cpu().numpy()
+
+            obj_pose = torch.cat([env.scene["object"].data.root_pos_w - env.scene.env_origins, env.scene["object"].data.root_quat_w], dim=-1).squeeze(0).cpu().numpy()
             ep_obj_traj.append(obj_pose)
             ep_joint_traj.append(robot.data.joint_pos.squeeze(0).cpu().numpy())
 
@@ -2856,19 +2856,19 @@ def replay_single_demo(env: ManagerBasedRLEnv, actions: list, demo_name: str, de
         # Override object and target initial states
         if "init_object_pos" in init_states:
             obj_state = env.scene["object"].data.default_root_state.clone()
-            obj_state[:, :3] = torch.tensor(init_states["init_object_pos"], device=env.device)
+            obj_state[:, :3] = torch.tensor(init_states["init_object_pos"], device=env.device) + env.scene.env_origins
             obj_state[:, 3:7] = torch.tensor(init_states["init_object_quat"], device=env.device)
             env.scene["object"].write_root_state_to_sim(obj_state)
             
         if "init_target_pos" in init_states:
             tgt_state = env.scene["target"].data.default_root_state.clone()
-            tgt_state[:, :3] = torch.tensor(init_states["init_target_pos"], device=env.device)
+            tgt_state[:, :3] = torch.tensor(init_states["init_target_pos"], device=env.device) + env.scene.env_origins
             tgt_state[:, 3:7] = torch.tensor(init_states["init_target_quat"], device=env.device)
             env.scene["target"].write_root_state_to_sim(tgt_state)
             
         if "init_robot_pos" in init_states:
             rob_state = env.scene["robot"].data.default_root_state.clone()
-            rob_state[:, :3] = torch.tensor(init_states["init_robot_pos"], device=env.device)
+            rob_state[:, :3] = torch.tensor(init_states["init_robot_pos"], device=env.device) + env.scene.env_origins
             rob_state[:, 3:7] = torch.tensor(init_states["init_robot_quat"], device=env.device)
             env.scene["robot"].write_root_state_to_sim(rob_state)
             
@@ -3047,7 +3047,7 @@ def main():
             j_traj = all_joint_traj[i]
             idx = min(step_idx, len(o_traj) - 1)
             
-            obj_state[i, :3] = torch.tensor(o_traj[idx, :3], device=env.device)
+            obj_state[i, :3] = torch.tensor(o_traj[idx, :3], device=env.device) + env.scene.env_origins[i]
             obj_state[i, 3:7] = torch.tensor(o_traj[idx, 3:7], device=env.device)
             j_pos[i] = torch.tensor(j_traj[idx], device=env.device)
             
@@ -3173,9 +3173,9 @@ def main():
         
         for i, s in enumerate(all_init_states):
             if s is not None:
-                obj_state[i, :3] = torch.tensor(s["init_object_pos"], device=env.device)
+                obj_state[i, :3] = torch.tensor(s["init_object_pos"], device=env.device) + env.scene.env_origins[i]
                 obj_state[i, 3:7] = torch.tensor(s["init_object_quat"], device=env.device)
-                tgt_state[i, :3] = torch.tensor(s["init_target_pos"], device=env.device)
+                tgt_state[i, :3] = torch.tensor(s["init_target_pos"], device=env.device) + env.scene.env_origins[i]
                 tgt_state[i, 3:7] = torch.tensor(s["init_target_quat"], device=env.device)
                 
         env.scene["object"].write_root_state_to_sim(obj_state)
@@ -3189,7 +3189,7 @@ def main():
             
             for i, s in enumerate(all_init_states):
                 if s is not None and "init_robot_pos" in s:
-                    rob_state[i, :3] = torch.tensor(s["init_robot_pos"], device=env.device)
+                    rob_state[i, :3] = torch.tensor(s["init_robot_pos"], device=env.device) + env.scene.env_origins[i]
                     rob_state[i, 3:7] = torch.tensor(s["init_robot_quat"], device=env.device)
                     j_pos[i] = torch.tensor(s["init_robot_joint_pos"], device=env.device)
                     j_vel[i] = torch.tensor(s["init_robot_joint_vel"], device=env.device)
@@ -3685,11 +3685,11 @@ def main():
         teleop.reset()
         
         init_states = {
-            "init_object_pos": env.scene["object"].data.root_pos_w.clone().squeeze(0).cpu().numpy(),
+            "init_object_pos": (env.scene["object"].data.root_pos_w - env.scene.env_origins).clone().squeeze(0).cpu().numpy(),
             "init_object_quat": env.scene["object"].data.root_quat_w.clone().squeeze(0).cpu().numpy(),
-            "init_target_pos": env.scene["target"].data.root_pos_w.clone().squeeze(0).cpu().numpy(),
+            "init_target_pos": (env.scene["target"].data.root_pos_w - env.scene.env_origins).clone().squeeze(0).cpu().numpy(),
             "init_target_quat": env.scene["target"].data.root_quat_w.clone().squeeze(0).cpu().numpy(),
-            "init_robot_pos": env.scene["robot"].data.root_pos_w.clone().squeeze(0).cpu().numpy(),
+            "init_robot_pos": (env.scene["robot"].data.root_pos_w - env.scene.env_origins).clone().squeeze(0).cpu().numpy(),
             "init_robot_quat": env.scene["robot"].data.root_quat_w.clone().squeeze(0).cpu().numpy(),
             "init_robot_joint_pos": env.scene["robot"].data.joint_pos.clone().squeeze(0).cpu().numpy(),
             "init_robot_joint_vel": env.scene["robot"].data.joint_vel.clone().squeeze(0).cpu().numpy(),
@@ -3754,8 +3754,8 @@ def main():
             ep_obs.append(policy_obs)
             ep_actions.append(action_np)
             
-            import torch
-            obj_pose = torch.cat([env.scene["object"].data.root_pos_w, env.scene["object"].data.root_quat_w], dim=-1).squeeze(0).cpu().numpy()
+
+            obj_pose = torch.cat([env.scene["object"].data.root_pos_w - env.scene.env_origins, env.scene["object"].data.root_quat_w], dim=-1).squeeze(0).cpu().numpy()
             ep_obj_traj.append(obj_pose)
             ep_joint_traj.append(robot.data.joint_pos.squeeze(0).cpu().numpy())
 

@@ -356,11 +356,11 @@ def main():
         obs, _ = env.reset()
 
         init_states = {
-            "init_object_pos": env.scene["object"].data.root_pos_w.clone().squeeze(0).cpu().numpy(),
+            "init_object_pos": (env.scene["object"].data.root_pos_w - env.scene.env_origins).clone().squeeze(0).cpu().numpy(),
             "init_object_quat": env.scene["object"].data.root_quat_w.clone().squeeze(0).cpu().numpy(),
-            "init_target_pos": env.scene["target"].data.root_pos_w.clone().squeeze(0).cpu().numpy(),
+            "init_target_pos": (env.scene["target"].data.root_pos_w - env.scene.env_origins).clone().squeeze(0).cpu().numpy(),
             "init_target_quat": env.scene["target"].data.root_quat_w.clone().squeeze(0).cpu().numpy(),
-            "init_robot_pos": env.scene["robot"].data.root_pos_w.clone().squeeze(0).cpu().numpy(),
+            "init_robot_pos": (env.scene["robot"].data.root_pos_w - env.scene.env_origins).clone().squeeze(0).cpu().numpy(),
             "init_robot_quat": env.scene["robot"].data.root_quat_w.clone().squeeze(0).cpu().numpy(),
             "init_robot_joint_pos": env.scene["robot"].data.joint_pos.clone().squeeze(0).cpu().numpy(),
             "init_robot_joint_vel": env.scene["robot"].data.joint_vel.clone().squeeze(0).cpu().numpy(),
@@ -837,7 +837,7 @@ def main():
             ep_actions.append(action_np)
             
 
-            obj_pose = torch.cat([env.scene["object"].data.root_pos_w, env.scene["object"].data.root_quat_w], dim=-1).squeeze(0).cpu().numpy()
+            obj_pose = torch.cat([env.scene["object"].data.root_pos_w - env.scene.env_origins, env.scene["object"].data.root_quat_w], dim=-1).squeeze(0).cpu().numpy()
             ep_obj_traj.append(obj_pose)
             ep_joint_traj.append(robot.data.joint_pos.squeeze(0).cpu().numpy())
 

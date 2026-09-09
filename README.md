@@ -463,3 +463,63 @@ class VisuomotorSceneCfg(DualArmSceneCfg):
 >    - `teleop/collect_demos.py`: 키보드 이벤트를 받아 로봇을 제어하고, 에피소드 성공(Y) 시 현재까지의 `obs`, `actions`, `images`를 버퍼에서 HDF5로 `demo_0`, `demo_1` 그룹으로 Append.
 >    - `scripts/generate_scripted_demos.py`: Isaac Lab의 `DifferentialInverseKinematics`를 활용하여, 타겟 큐브의 위치를 파악한 뒤 양팔이 부드럽게 Pick & Place 궤적을 그리도록 Waypoint를 생성하고 HDF5에 자동 저장.
 > **[복사할 프롬프트 끝]**
+## 5. Antigravity AI 프로젝트 재구성 프롬프트
+
+차후에 Antigravity AI(또는 다른 LLM 에이전트)에게 현재 프로젝트와 동일한 구조와 기능을 가진 모방 학습(IL) 파이프라인을 처음부터 구축해 달라고 요청할 때 사용할 수 있는 프롬프트 템플릿입니다. 복사해서 사용하시면 현재 프로젝트의 구조를 그대로 복원할 수 있습니다.
+
+### 프롬프트 복사하기
+> **역할 및 목표:**
+> 너는 Isaac Lab과 PyTorch를 기반으로 로봇 팔 제어 및 모방 학습(Imitation Learning) 환경을 구축하는 전문가야.
+> 기존의 강화학습(RL) 환경(예: `dual_arm0`) 코드를 전혀 건드리지 않고, 독립적인 모방 학습 전용 프로젝트 폴더(`dual_arm_il`)를 생성해서 완전한 IL 파이프라인을 구성해 줘.
+> 
+> **주요 요구사항:**
+> 1. **프로젝트 구조:** `configs/`, `teleop/`, `dataset/`, `models/`, `scripts/`, `data/`, `checkpoints/`, `runs/` 폴더로 기능별 역할을 완벽히 분리해 줘.
+> 2. **텔레오퍼레이션 (`teleop/`):** Isaac Sim에서 키보드를 통해 양팔 로봇(14 DoF + 2 Gripper)을 조작하고, 성공한 에피소드(관측치 및 액션 궤적)를 HDF5 포맷으로 저장할 수 있는 스크립트를 만들어 줘. 반드시 Active-Arm Toggle 방식(Tab 키로 양팔을 번갈아 제어)을 지원해야 해.
+> 3. **데이터셋 (`dataset/`):** 수집된 HDF5 데이터를 PyTorch DataLoader에서 사용할 수 있도록 파싱하고, Observation/Action을 Min-Max로 정규화(Normalization)하며, Horizon(과거 관측치 개수, 미래 예측 액션 개수) 단위로 텐서를 슬라이싱(Chunking)하는 데이터셋 클래스를 구현해 줘.
+> 4. **모델 아키텍처 (`models/`):** 다음 3가지 최신 모방 학습 알고리즘을 각각 모듈화하여 구현해 줘.
+>    - Behavior Cloning (MLP / RNN 기반 Baseline)
+>    - Diffusion Policy (1D Temporal UNet 구조 및 DDPM/DDIM 스케줄러 기반)
+>    - ACT (Action Chunking with Transformers, CVAE 기반)
+> 5. **통합 학습 스크립트 (`scripts/train.py`):**
+>    - CLI의 `--algo` 인자를 통해 위 3가지 알고리즘 중 하나를 유연하게 선택해 학습할 수 있어야 해.
+>    - 검증 손실(Validation Loss)이 갱신될 때마다 `best_model.pt`로 저장하는 로직을 포함해 줘.
+>    - **[중요] TensorBoard 연동:** `torch.utils.tensorboard.SummaryWriter`를 사용해 Train Loss, Val Loss, Learning Rate의 변화 추이를 `runs/` 폴더에 실시간으로 기록하는 코드를 필수로 넣어 줘.
+> 6. **자동 데모 수집 (`scripts/generate_scripted_demos.py`):** 사람의 키보드 조작 없이 코드(State Machine)로 로봇을 제어하여 완벽한 데모를 대량(예: 50개)으로 자동 수집하는 스크립트를 작성해 줘.
+> 7. **검증 및 평가 (`scripts/eval.py`, `replay_demos.py`):** 학습이 완료된 가중치 모델을 Isaac Sim 환경에 띄워 실제 미션 성공률을 Closed-loop로 측정하는 평가 스크립트와, 수집된 데모 파일이 정상적인지 시뮬레이션에서 재현(Replay)하는 스크립트를 구현해 줘.
+
+> 
+> **[에이전트 필수 행동 수칙 (CRITICAL)]**
+> 1. **설명만 하지 말고 파일 생성하기:** 위에서 언급된 모든 폴더와 Python 파일들을 단순히 설명하는 데 그치지 말고, `write_to_file` 같은 도구를 사용해서 실제 디렉토리에 **모든 파일과 전체 코드를 빠짐없이 생성**해 줘.
+> 2. **생략 금지:** 코드 작성 시 `pass`, `TODO`, `...` (구현 생략) 등을 절대 사용하지 마. 나중에 내가 수정할 필요 없이 즉시 실행 가능한(Ready-to-run) 수준의 완전하고 동작하는 코드로 처음부터 끝까지 채워 줘.
+> 3. **모든 구성요소 작성:** `requirements.txt` 패키지 목록부터 `configs/` 내부의 YAML 및 Python 환경 설정 파일까지, 프로젝트 구동에 필요한 단 하나의 파일도 누락 없이 전부 직접 작성해 줘.
+
+---
+
+## 5. Antigravity AI 프로젝트 재구성 전체 프롬프트 (파일 통합본)
+
+현재 프로젝트의 **모든 소스 코드(Python, YAML 등) 원본을 포함**하여, 에이전트가 단 하나의 코드도 생략하지 않고 완벽하게 동일한 구조와 코드를 가진 프로젝트를 재구축할 수 있도록 지시하는 마스터 프롬프트를 별도의 파일로 생성해 두었습니다.
+
+👉 **[recreation_prompt.md](recreation_prompt.md)** 
+
+나중에 새로운 환경에서 프로젝트를 복원하실 때, 위 링크된 `recreation_prompt.md` 파일의 전체 내용을 복사해서 에이전트(LLM)에게 전달해 주시면 됩니다. 프롬프트 안에는 다음과 같은 강력한 행동 수칙과 모든 소스 코드가 들어있어 100% 동일한 복원이 보장됩니다.
+
+> **[에이전트 필수 행동 수칙 (CRITICAL)]**
+> 1. **설명만 하지 말고 파일 생성하기:** 모든 폴더와 파일들을 실제 디렉토리에 빠짐없이 생성해 줘.
+> 2. **코드 생략 절대 금지:** 제공된 텍스트의 파일 내용(코드)을 100% 동일하게 복사해서 작성해 줘. `pass`, `TODO`, `...` 등을 사용해서 코드를 임의로 생략하거나 축약하면 절대 안 돼. 
+> 3. **프로젝트 구조 완벽 재현:** 파일 경로에 맞게 폴더 구조를 생성하고 정확히 위치시켜 줘.
+
+---
+
+## 6. (추천) 원클릭 복원 스크립트 (.sh)
+
+LLM 프롬프트를 사용하는 것보다 더 빠르고 확실하게 프로젝트를 동일하게 생성하려면, 포함되어 있는 자동 복원 스크립트를 사용하는 것을 추천합니다.
+
+👉 **[recreate_project.sh](recreate_project.sh)**
+
+위 쉘 스크립트 파일 안에는 현재 프로젝트의 모든 소스 코드가 하드코딩되어 있습니다. 완전히 빈 폴더(또는 새로운 서버 환경)에 이 파일 하나만 덩그러니 복사해두고 아래 명령어만 실행하면 알아서 모든 폴더를 만들고 코드를 찍어냅니다.
+
+```bash
+# 실행 권한 부여 후 스크립트 실행
+chmod +x recreate_project.sh
+./recreate_project.sh
+```

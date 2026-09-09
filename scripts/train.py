@@ -21,6 +21,8 @@ import yaml
 import torch
 from torch.utils.data import DataLoader, random_split
 from tqdm import tqdm
+from torch.utils.tensorboard import SummaryWriter
+from datetime import datetime
 
 # Add project root to sys.path
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -155,10 +157,12 @@ def main():
     save_dir = os.path.join(PROJECT_ROOT, "checkpoints", args.algo)
     os.makedirs(save_dir, exist_ok=True)
     
-    # Initialize TensorBoard Writer
-    tb_dir = os.path.join(save_dir, "logs")
-    writer = SummaryWriter(log_dir=tb_dir)
-    print(f" TensorBoard logged to: {tb_dir}")
+    # TensorBoard setup
+    run_name = f"{args.algo}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+    tb_log_dir = os.path.join(PROJECT_ROOT, "runs", run_name)
+    writer = SummaryWriter(log_dir=tb_log_dir)
+    print(f" TensorBoard Log Dir: {tb_log_dir}")
+    print(" (Run: tensorboard --logdir=runs  to monitor)\n" + "=" * 60)
 
     # Load Dataset
     pred_h = cfg.get("pred_horizon", 16) if args.algo == "diffusion" else cfg.get("chunk_size", 24)
@@ -244,6 +248,12 @@ def main():
                 num_val_batches += 1
 
         avg_val_loss = val_loss_sum / max(1, num_val_batches)
+        
+        # Log to TensorBoard
+        writer.add_scalar("Loss/Train", avg_train_loss, epoch)
+        writer.add_scalar("Loss/Validation", avg_val_loss, epoch)
+        writer.add_scalar("LearningRate", optimizer.param_groups[0]['lr'], epoch)
+        
         print(f"Epoch {epoch:3d} | Train Loss: {avg_train_loss:.5f} | Val Loss: {avg_val_loss:.5f}")
 
         # Log epoch-wise metrics to TensorBoard
@@ -277,6 +287,7 @@ def main():
     writer.close()
     print("\n[Training Complete]")
     print(f"Best model saved at: {os.path.join(save_dir, 'best_model.pt')}")
+    writer.close()
 
 
 if __name__ == "__main__":

@@ -453,4 +453,13 @@ class VisuomotorSceneCfg(DualArmSceneCfg):
 >
 > 8. **TensorBoard 로깅 적용**:
 >    학습 스크립트(`train.py`) 작성 시 `torch.utils.tensorboard`의 `SummaryWriter`를 도입하여 Train/Val Loss와 Learning Rate가 기록되도록 코드를 구성해 줘.
+> 
+> 9. **각 파일별 핵심 내용 (정확한 동작을 위한 세부 지침)**:
+>    - `configs/env_cfg.py`: `DualArmSceneCfg`를 상속한 `VisuomotorSceneCfg` 작성 (손목 카메라 옵션 포함). `ObservationManagerCfg` 없이 `VisuomotorObsCfg`를 독립 작성.
+>    - `dataset/il_dataset.py`: HDF5 파일에서 `obs`, `actions`만 메모리에 올리고 `images`는 `self.get_h5_file()`를 통해 `__getitem__`에서 지연 로딩. 이미지 텐서는 `(C, H, W)` 형태로 0~1 사이 float32 정규화.
+>    - `models/vision_encoder.py`: `torchvision.models`를 활용하여 `resnet18`, `resnet50`, `vit_b_16` 등의 백본을 불러오고, 마지막 FC 레이어를 제거하여 1D Feature Vector를 반환하는 `VisionEncoder` 클래스 구현.
+>    - `scripts/train.py`: `build_model()` 함수로 BC/Diffusion/ACT 모델 인스턴스화. `AdamW` 옵티마이저와 `CosineAnnealingLR` 스케줄러 사용. 에포크마다 TensorBoard에 기록하고 `best_model.pt` 저장.
+>    - `scripts/eval.py`: `gym.make("Isaac-Dual-Arm-IL-v0")` 호출 전 반드시 `gym.register`로 로컬 `DualArmILEnvCfg` 강제 매핑. 모델 로드 후 시뮬레이션 환경에서 루프를 돌며 평가.
+>    - `teleop/collect_demos.py`: 키보드 이벤트를 받아 로봇을 제어하고, 에피소드 성공(Y) 시 현재까지의 `obs`, `actions`, `images`를 버퍼에서 HDF5로 `demo_0`, `demo_1` 그룹으로 Append.
+>    - `scripts/generate_scripted_demos.py`: Isaac Lab의 `DifferentialInverseKinematics`를 활용하여, 타겟 큐브의 위치를 파악한 뒤 양팔이 부드럽게 Pick & Place 궤적을 그리도록 Waypoint를 생성하고 HDF5에 자동 저장.
 > **[복사할 프롬프트 끝]**

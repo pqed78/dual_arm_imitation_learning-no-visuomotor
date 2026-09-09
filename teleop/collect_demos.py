@@ -85,7 +85,7 @@ def solve_dls_ik(
     return delta_q.unsqueeze(0)
 
 
-def save_episode_to_hdf5(hdf5_path: str, ep_idx: int, observations: list, actions: list, rewards: list, init_states: dict = None):
+def save_episode_to_hdf5(hdf5_path: str, ep_idx: int, observations: list, actions: list, rewards: list, init_states: dict = None, obj_traj: list = None, joint_traj: list = None):
     """Save a single successful demonstration to the HDF5 file."""
     os.makedirs(os.path.dirname(os.path.abspath(hdf5_path)), exist_ok=True)
 
@@ -105,6 +105,11 @@ def save_episode_to_hdf5(hdf5_path: str, ep_idx: int, observations: list, action
         if init_states:
             for k, v in init_states.items():
                 demo_group.create_dataset(k, data=v)
+                
+        if obj_traj is not None:
+            demo_group.create_dataset("object_poses", data=np.array(obj_traj, dtype=np.float32), compression="gzip")
+        if joint_traj is not None:
+            demo_group.create_dataset("robot_joint_poses", data=np.array(joint_traj, dtype=np.float32), compression="gzip")
 
         # Update total samples attribute in data group
         total_samples = f["data"].attrs.get("total", 0) + len(act_array)
@@ -181,6 +186,8 @@ def main():
         ep_obs = []
         ep_actions = []
         ep_rewards = []
+        ep_obj_traj = []
+        ep_joint_traj = []
 
         print(f"\n>>> Starting Episode for Demo #{collected_count} (Target: {target_count}) <<<")
 
@@ -229,6 +236,11 @@ def main():
 
             ep_obs.append(policy_obs)
             ep_actions.append(action_np)
+            
+            import torch
+            obj_pose = torch.cat([env.scene["object"].data.root_pos_w, env.scene["object"].data.root_quat_w], dim=-1).squeeze(0).cpu().numpy()
+            ep_obj_traj.append(obj_pose)
+            ep_joint_traj.append(robot.data.joint_pos.squeeze(0).cpu().numpy())
 
             # 5. Step simulation
             obs, reward, terminated, truncated, _ = env.step(action)
@@ -243,6 +255,8 @@ def main():
                     ep_actions,
                     ep_rewards,
                     init_states,
+                    ep_obj_traj,
+                    ep_joint_traj,
                 )
                 collected_count += 1
                 teleop.reset_episode_flags()

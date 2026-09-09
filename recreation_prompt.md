@@ -2127,7 +2127,7 @@ def compute_tcp(wrist_pos: torch.Tensor, wrist_quat: torch.Tensor) -> tuple[torc
     return tcp_pos, z_dir
 
 
-def save_episode_to_hdf5(hdf5_path: str, ep_idx: int, observations: list, actions: list, rewards: list, init_states: dict = None):
+def save_episode_to_hdf5(hdf5_path: str, ep_idx: int, observations: list, actions: list, rewards: list, init_states: dict = None, obj_traj: list = None, joint_traj: list = None):
     os.makedirs(os.path.dirname(os.path.abspath(hdf5_path)), exist_ok=True)
     mode = "a" if os.path.exists(hdf5_path) else "w"
     with h5py.File(hdf5_path, mode) as f:
@@ -2145,6 +2145,11 @@ def save_episode_to_hdf5(hdf5_path: str, ep_idx: int, observations: list, action
         if init_states:
             for k, v in init_states.items():
                 demo_group.create_dataset(k, data=v)
+                
+        if obj_traj is not None:
+            demo_group.create_dataset("object_poses", data=np.array(obj_traj, dtype=np.float32), compression="gzip")
+        if joint_traj is not None:
+            demo_group.create_dataset("robot_joint_poses", data=np.array(joint_traj, dtype=np.float32), compression="gzip")
 
         total_samples = f["data"].attrs.get("total", 0) + len(act_array)
         f["data"].attrs["total"] = total_samples
@@ -2292,6 +2297,8 @@ def main():
         ep_obs = []
         ep_actions = []
         ep_rewards = []
+        ep_obj_traj = []
+        ep_joint_traj = []
 
         print(f"\n>>> Generating Scripted Demo #{collected_count} (Target: {target_count}) <<<")
 
@@ -2741,6 +2748,11 @@ def main():
             action_np = action.squeeze(0).detach().cpu().numpy()
             ep_obs.append(policy_obs)
             ep_actions.append(action_np)
+            
+            import torch
+            obj_pose = torch.cat([env.scene["object"].data.root_pos_w, env.scene["object"].data.root_quat_w], dim=-1).squeeze(0).cpu().numpy()
+            ep_obj_traj.append(obj_pose)
+            ep_joint_traj.append(robot.data.joint_pos.squeeze(0).cpu().numpy())
 
             # Step simulation
             obs, reward, terminated, truncated, _ = env.step(action)
@@ -2931,6 +2943,127 @@ def main():
     env.close()
     simulation_app.close()
 
+
+if __name__ == "__main__":
+    main()
+```
+
+### [File: `scripts/replay_demos_kinematic.py`]
+```python
+import argparse
+import os
+import sys
+import time
+import h5py
+import torch
+
+from isaaclab.app import AppLauncher
+
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+PARENT_ROOT = os.path.dirname(PROJECT_ROOT)
+for path in [PROJECT_ROOT, PARENT_ROOT]:
+    if path not in sys.path:
+        sys.path.insert(0, path)
+
+parser = argparse.ArgumentParser(description="Kinematic Replay of multiple demonstrations (100% Visual Accuracy).")
+parser.add_argument("--dataset", type=str, default=os.path.join(PROJECT_ROOT, "data", "demos.hdf5"))
+parser.add_argument("--num_parallel", type=int, default=4, help="Number of demos to play simultaneously.")
+parser.add_argument("--delay", type=float, default=0.033, help="Delay between frames in seconds.")
+AppLauncher.add_app_launcher_args(parser)
+args_cli = parser.parse_args()
+
+app_launcher = AppLauncher(args_cli)
+simulation_app = app_launcher.app
+
+import gymnasium as gym
+from isaaclab.envs import ManagerBasedRLEnv
+try:
+    from dual_arm_il.configs.env_cfg import DualArmILEnvCfg
+except ModuleNotFoundError:
+    from configs.env_cfg import DualArmILEnvCfg
+
+def main():
+    if not os.path.exists(args_cli.dataset):
+        raise FileNotFoundError(f"Dataset not found: {args_cli.dataset}")
+
+    with h5py.File(args_cli.dataset, "r") as f:
+        data_grp = f["data"]
+        demo_keys = sorted([k for k in data_grp.keys() if k.startswith("demo_")], key=lambda x: int(x.split("_")[1]))
+
+        if len(demo_keys) == 0:
+            print("[Replay] No demonstrations found in dataset!")
+            simulation_app.close()
+            return
+            
+        num_parallel = min(args_cli.num_parallel, len(demo_keys))
+        target_demos = demo_keys[:num_parallel]
+        print(f"[Kinematic Replay] Preparing to play {num_parallel} demos in parallel: {target_demos}")
+
+        # Check if kinematic data is available
+        if "object_poses" not in data_grp[target_demos[0]]:
+            print("ERROR: Dataset does not contain 'object_poses' and 'robot_joint_poses'.")
+            print("Please regenerate the dataset using the updated collect/generate scripts!")
+            simulation_app.close()
+            return
+
+        all_obj_traj = []
+        all_joint_traj = []
+        max_length = 0
+        
+        for key in target_demos:
+            obj_traj = data_grp[key]["object_poses"][:]
+            joint_traj = data_grp[key]["robot_joint_poses"][:]
+            all_obj_traj.append(obj_traj)
+            all_joint_traj.append(joint_traj)
+            if len(obj_traj) > max_length:
+                max_length = len(obj_traj)
+
+    env_cfg = DualArmILEnvCfg()
+    env_cfg.sim.device = args_cli.device
+    env_cfg.scene.num_envs = num_parallel
+    gym.register(
+        id="Isaac-Dual-Arm-IL-v0",
+        entry_point="isaaclab.envs:ManagerBasedRLEnv",
+        kwargs={"env_cfg_entry_point": DualArmILEnvCfg},
+        disable_env_checker=True,
+    )
+    env: ManagerBasedRLEnv = gym.make("Isaac-Dual-Arm-IL-v0", cfg=env_cfg).unwrapped
+
+    env.reset()
+    
+    print(f"\n--- Starting KINEMATIC parallel replay (Max steps: {max_length}) ---")
+    
+    obj_state = env.scene["object"].data.default_root_state.clone()
+    j_pos = env.scene["robot"].data.default_joint_pos.clone()
+    j_vel = env.scene["robot"].data.default_joint_vel.clone() * 0.0
+    
+    # Run loop
+    for step_idx in range(max_length):
+        if not simulation_app.is_running():
+            break
+
+        for i in range(num_parallel):
+            o_traj = all_obj_traj[i]
+            j_traj = all_joint_traj[i]
+            idx = min(step_idx, len(o_traj) - 1)
+            
+            obj_state[i, :3] = torch.tensor(o_traj[idx, :3], device=env.device)
+            obj_state[i, 3:7] = torch.tensor(o_traj[idx, 3:7], device=env.device)
+            j_pos[i] = torch.tensor(j_traj[idx], device=env.device)
+            
+        env.scene["object"].write_root_state_to_sim(obj_state)
+        env.scene["robot"].write_joint_state_to_sim(j_pos, j_vel)
+        
+        # Step physics to render
+        env.sim.step()
+        
+        if args_cli.delay > 0:
+            time.sleep(args_cli.delay)
+
+    print("Finished kinematic replay.")
+    time.sleep(2.0)
+    env.close()
+    simulation_app.close()
 
 if __name__ == "__main__":
     main()
@@ -3469,7 +3602,7 @@ def solve_dls_ik(
     return delta_q.unsqueeze(0)
 
 
-def save_episode_to_hdf5(hdf5_path: str, ep_idx: int, observations: list, actions: list, rewards: list, init_states: dict = None):
+def save_episode_to_hdf5(hdf5_path: str, ep_idx: int, observations: list, actions: list, rewards: list, init_states: dict = None, obj_traj: list = None, joint_traj: list = None):
     """Save a single successful demonstration to the HDF5 file."""
     os.makedirs(os.path.dirname(os.path.abspath(hdf5_path)), exist_ok=True)
 
@@ -3489,6 +3622,11 @@ def save_episode_to_hdf5(hdf5_path: str, ep_idx: int, observations: list, action
         if init_states:
             for k, v in init_states.items():
                 demo_group.create_dataset(k, data=v)
+                
+        if obj_traj is not None:
+            demo_group.create_dataset("object_poses", data=np.array(obj_traj, dtype=np.float32), compression="gzip")
+        if joint_traj is not None:
+            demo_group.create_dataset("robot_joint_poses", data=np.array(joint_traj, dtype=np.float32), compression="gzip")
 
         # Update total samples attribute in data group
         total_samples = f["data"].attrs.get("total", 0) + len(act_array)
@@ -3565,6 +3703,8 @@ def main():
         ep_obs = []
         ep_actions = []
         ep_rewards = []
+        ep_obj_traj = []
+        ep_joint_traj = []
 
         print(f"\n>>> Starting Episode for Demo #{collected_count} (Target: {target_count}) <<<")
 
@@ -3613,6 +3753,11 @@ def main():
 
             ep_obs.append(policy_obs)
             ep_actions.append(action_np)
+            
+            import torch
+            obj_pose = torch.cat([env.scene["object"].data.root_pos_w, env.scene["object"].data.root_quat_w], dim=-1).squeeze(0).cpu().numpy()
+            ep_obj_traj.append(obj_pose)
+            ep_joint_traj.append(robot.data.joint_pos.squeeze(0).cpu().numpy())
 
             # 5. Step simulation
             obs, reward, terminated, truncated, _ = env.step(action)
@@ -3627,6 +3772,8 @@ def main():
                     ep_actions,
                     ep_rewards,
                     init_states,
+                    ep_obj_traj,
+                    ep_joint_traj,
                 )
                 collected_count += 1
                 teleop.reset_episode_flags()

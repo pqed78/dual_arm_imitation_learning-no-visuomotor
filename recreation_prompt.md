@@ -1808,7 +1808,10 @@ def main():
             temporal_ensembling=cfg.get("temporal_ensembling", True),
         )
 
-    model.load_state_dict(checkpoint["model_state_dict"])
+    if "model_state_dict" in checkpoint:
+        model.load_state_dict(checkpoint["model_state_dict"])
+    else:
+        model.load_state_dict(checkpoint)
     model.to(args_cli.device)
     model.eval()
 

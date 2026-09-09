@@ -56,6 +56,8 @@ def main():
 
         all_obj_traj = []
         all_joint_traj = []
+        all_init_robot_pos = []
+        all_init_robot_quat = []
         max_length = 0
         
         for key in target_demos:
@@ -65,6 +67,13 @@ def main():
             all_joint_traj.append(joint_traj)
             if len(obj_traj) > max_length:
                 max_length = len(obj_traj)
+                
+            if "init_robot_pos" in data_grp[key]:
+                all_init_robot_pos.append(data_grp[key]["init_robot_pos"][:])
+                all_init_robot_quat.append(data_grp[key]["init_robot_quat"][:])
+            else:
+                all_init_robot_pos.append(None)
+                all_init_robot_quat.append(None)
 
     env_cfg = DualArmILEnvCfg()
     env_cfg.sim.device = args_cli.device
@@ -100,9 +109,9 @@ def main():
             obj_state[i, 3:7] = torch.tensor(o_traj[idx, 3:7], device=env.device)
             j_pos[i] = torch.tensor(j_traj[idx], device=env.device)
             
-            if "init_robot_pos" in data_grp[target_demos[i]]:
-                rob_state[i, :3] = torch.tensor(data_grp[target_demos[i]]["init_robot_pos"][:], device=env.device) + env.scene.env_origins[i]
-                rob_state[i, 3:7] = torch.tensor(data_grp[target_demos[i]]["init_robot_quat"][:], device=env.device)
+            if all_init_robot_pos[i] is not None:
+                rob_state[i, :3] = torch.tensor(all_init_robot_pos[i], device=env.device) + env.scene.env_origins[i]
+                rob_state[i, 3:7] = torch.tensor(all_init_robot_quat[i], device=env.device)
             
         env.scene["object"].write_root_state_to_sim(obj_state)
         env.scene["robot"].write_root_state_to_sim(rob_state)

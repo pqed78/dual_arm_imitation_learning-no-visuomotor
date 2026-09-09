@@ -58,6 +58,8 @@ def main():
         all_joint_traj = []
         all_init_robot_pos = []
         all_init_robot_quat = []
+        all_init_target_pos = []
+        all_init_target_quat = []
         max_length = 0
         
         for key in target_demos:
@@ -74,6 +76,13 @@ def main():
             else:
                 all_init_robot_pos.append(None)
                 all_init_robot_quat.append(None)
+                
+            if "init_target_pos" in data_grp[key]:
+                all_init_target_pos.append(data_grp[key]["init_target_pos"][:])
+                all_init_target_quat.append(data_grp[key]["init_target_quat"][:])
+            else:
+                all_init_target_pos.append(None)
+                all_init_target_quat.append(None)
 
     env_cfg = DualArmILEnvCfg()
     env_cfg.sim.device = args_cli.device
@@ -118,9 +127,9 @@ def main():
             obj_state[i, 3:7] = torch.tensor(o_traj[idx, 3:7], device=env.device)
             j_pos[i] = torch.tensor(j_traj[idx], device=env.device)
             
-            if "init_target_pos" in data_grp[target_demos[i]]:
-                tgt_state[i, :3] = torch.tensor(data_grp[target_demos[i]]["init_target_pos"][:], device=env.device) + env.scene.env_origins[i]
-                tgt_state[i, 3:7] = torch.tensor(data_grp[target_demos[i]]["init_target_quat"][:], device=env.device)
+            if all_init_target_pos[i] is not None:
+                tgt_state[i, :3] = torch.tensor(all_init_target_pos[i], device=env.device) + env.scene.env_origins[i]
+                tgt_state[i, 3:7] = torch.tensor(all_init_target_quat[i], device=env.device)
                 
             if all_init_robot_pos[i] is not None:
                 rob_state[i, :3] = torch.tensor(all_init_robot_pos[i], device=env.device) + env.scene.env_origins[i]

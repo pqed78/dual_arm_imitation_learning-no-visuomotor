@@ -3042,6 +3042,7 @@ def main():
     print(f"\n--- Starting KINEMATIC parallel replay (Max steps: {max_length}) ---")
     
     obj_state = env.scene["object"].data.default_root_state.clone()
+    rob_state = env.scene["robot"].data.default_root_state.clone()
     j_pos = env.scene["robot"].data.default_joint_pos.clone()
     j_vel = env.scene["robot"].data.default_joint_vel.clone() * 0.0
     
@@ -3059,7 +3060,12 @@ def main():
             obj_state[i, 3:7] = torch.tensor(o_traj[idx, 3:7], device=env.device)
             j_pos[i] = torch.tensor(j_traj[idx], device=env.device)
             
+            if "init_robot_pos" in data_grp[target_demos[i]]:
+                rob_state[i, :3] = torch.tensor(data_grp[target_demos[i]]["init_robot_pos"][:], device=env.device) + env.scene.env_origins[i]
+                rob_state[i, 3:7] = torch.tensor(data_grp[target_demos[i]]["init_robot_quat"][:], device=env.device)
+            
         env.scene["object"].write_root_state_to_sim(obj_state)
+        env.scene["robot"].write_root_state_to_sim(rob_state)
         env.scene["robot"].write_joint_state_to_sim(j_pos, j_vel)
         
         # Step physics to render

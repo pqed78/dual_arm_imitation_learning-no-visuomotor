@@ -836,7 +836,7 @@ def main():
             ep_obs.append(policy_obs)
             ep_actions.append(action_np)
             
-            import torch
+
             obj_pose = torch.cat([env.scene["object"].data.root_pos_w, env.scene["object"].data.root_quat_w], dim=-1).squeeze(0).cpu().numpy()
             ep_obj_traj.append(obj_pose)
             ep_joint_traj.append(robot.data.joint_pos.squeeze(0).cpu().numpy())

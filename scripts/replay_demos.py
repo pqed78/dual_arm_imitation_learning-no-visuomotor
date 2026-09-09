@@ -48,9 +48,23 @@ except ModuleNotFoundError:
     from configs.env_cfg import DualArmILEnvCfg
 
 
-def replay_single_demo(env: ManagerBasedRLEnv, actions: list, demo_name: str, delay: float):
+def replay_single_demo(env: ManagerBasedRLEnv, actions: list, demo_name: str, delay: float, init_states: dict = None):
     print(f"\n--- Replaying {demo_name} ({len(actions)} steps) ---")
     env.reset()
+
+    if init_states:
+        # Override object and target initial states
+        if "init_object_pos" in init_states:
+            obj_state = env.scene["object"].data.default_root_state.clone()
+            obj_state[:, :3] = torch.tensor(init_states["init_object_pos"], device=env.device)
+            obj_state[:, 3:7] = torch.tensor(init_states["init_object_quat"], device=env.device)
+            env.scene["object"].write_root_state_to_sim(obj_state)
+            
+        if "init_target_pos" in init_states:
+            tgt_state = env.scene["target"].data.default_root_state.clone()
+            tgt_state[:, :3] = torch.tensor(init_states["init_target_pos"], device=env.device)
+            tgt_state[:, 3:7] = torch.tensor(init_states["init_target_quat"], device=env.device)
+            env.scene["target"].write_root_state_to_sim(tgt_state)
 
     for step_idx, act in enumerate(actions):
         if not simulation_app.is_running():
@@ -96,7 +110,15 @@ def main():
 
         for key in target_demos:
             actions = data_grp[key]["actions"][:]
-            replay_single_demo(env, actions, key, args_cli.delay)
+            init_states = None
+            if "init_object_pos" in data_grp[key]:
+                init_states = {
+                    "init_object_pos": data_grp[key]["init_object_pos"][:],
+                    "init_object_quat": data_grp[key]["init_object_quat"][:],
+                    "init_target_pos": data_grp[key]["init_target_pos"][:],
+                    "init_target_quat": data_grp[key]["init_target_quat"][:],
+                }
+            replay_single_demo(env, actions, key, args_cli.delay, init_states)
             time.sleep(1.0)
 
     env.close()

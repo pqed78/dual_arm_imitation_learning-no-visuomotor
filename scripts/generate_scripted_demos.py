@@ -214,7 +214,7 @@ def compute_tcp(wrist_pos: torch.Tensor, wrist_quat: torch.Tensor) -> tuple[torc
     return tcp_pos, z_dir
 
 
-def save_episode_to_hdf5(hdf5_path: str, ep_idx: int, observations: list, actions: list, rewards: list):
+def save_episode_to_hdf5(hdf5_path: str, ep_idx: int, observations: list, actions: list, rewards: list, init_states: dict = None):
     os.makedirs(os.path.dirname(os.path.abspath(hdf5_path)), exist_ok=True)
     mode = "a" if os.path.exists(hdf5_path) else "w"
     with h5py.File(hdf5_path, mode) as f:
@@ -229,6 +229,9 @@ def save_episode_to_hdf5(hdf5_path: str, ep_idx: int, observations: list, action
         demo_group.create_dataset("actions", data=act_array, compression="gzip")
         demo_group.create_dataset("rewards", data=rew_array, compression="gzip")
         demo_group.attrs["num_samples"] = len(act_array)
+        if init_states:
+            for k, v in init_states.items():
+                demo_group.create_dataset(k, data=v)
 
         total_samples = f["data"].attrs.get("total", 0) + len(act_array)
         f["data"].attrs["total"] = total_samples

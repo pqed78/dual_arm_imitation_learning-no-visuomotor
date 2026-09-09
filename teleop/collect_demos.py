@@ -85,7 +85,7 @@ def solve_dls_ik(
     return delta_q.unsqueeze(0)
 
 
-def save_episode_to_hdf5(hdf5_path: str, ep_idx: int, observations: list, actions: list, rewards: list):
+def save_episode_to_hdf5(hdf5_path: str, ep_idx: int, observations: list, actions: list, rewards: list, init_states: dict = None):
     """Save a single successful demonstration to the HDF5 file."""
     os.makedirs(os.path.dirname(os.path.abspath(hdf5_path)), exist_ok=True)
 
@@ -102,6 +102,9 @@ def save_episode_to_hdf5(hdf5_path: str, ep_idx: int, observations: list, action
         demo_group.create_dataset("actions", data=act_array, compression="gzip")
         demo_group.create_dataset("rewards", data=rew_array, compression="gzip")
         demo_group.attrs["num_samples"] = len(act_array)
+        if init_states:
+            for k, v in init_states.items():
+                demo_group.create_dataset(k, data=v)
 
         # Update total samples attribute in data group
         total_samples = f["data"].attrs.get("total", 0) + len(act_array)
@@ -158,6 +161,13 @@ def main():
     while simulation_app.is_running() and collected_count < target_count:
         obs, _ = env.reset()
         teleop.reset()
+        
+        init_states = {
+            "init_object_pos": env.scene["object"].data.root_pos_w.clone().squeeze(0).cpu().numpy(),
+            "init_object_quat": env.scene["object"].data.root_quat_w.clone().squeeze(0).cpu().numpy(),
+            "init_target_pos": env.scene["target"].data.root_pos_w.clone().squeeze(0).cpu().numpy(),
+            "init_target_quat": env.scene["target"].data.root_quat_w.clone().squeeze(0).cpu().numpy(),
+        }
 
         # Commanded joint targets buffer (starts at current joint positions)
         current_joint_pos = robot.data.joint_pos.clone()
@@ -228,6 +238,7 @@ def main():
                     ep_obs,
                     ep_actions,
                     ep_rewards,
+                    init_states,
                 )
                 collected_count += 1
                 teleop.reset_episode_flags()

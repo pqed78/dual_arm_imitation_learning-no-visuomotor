@@ -2133,7 +2133,7 @@ def compute_tcp(wrist_pos: torch.Tensor, wrist_quat: torch.Tensor) -> tuple[torc
     return tcp_pos, z_dir
 
 
-def save_episode_to_hdf5(hdf5_path: str, ep_idx: int, observations: list, actions: list, rewards: list):
+def save_episode_to_hdf5(hdf5_path: str, ep_idx: int, observations: list, actions: list, rewards: list, init_states: dict = None):
     os.makedirs(os.path.dirname(os.path.abspath(hdf5_path)), exist_ok=True)
     mode = "a" if os.path.exists(hdf5_path) else "w"
     with h5py.File(hdf5_path, mode) as f:
@@ -2148,6 +2148,9 @@ def save_episode_to_hdf5(hdf5_path: str, ep_idx: int, observations: list, action
         demo_group.create_dataset("actions", data=act_array, compression="gzip")
         demo_group.create_dataset("rewards", data=rew_array, compression="gzip")
         demo_group.attrs["num_samples"] = len(act_array)
+        if init_states:
+            for k, v in init_states.items():
+                demo_group.create_dataset(k, data=v)
 
         total_samples = f["data"].attrs.get("total", 0) + len(act_array)
         f["data"].attrs["total"] = total_samples
@@ -2829,9 +2832,23 @@ except ModuleNotFoundError:
     from configs.env_cfg import DualArmILEnvCfg
 
 
-def replay_single_demo(env: ManagerBasedRLEnv, actions: list, demo_name: str, delay: float):
+def replay_single_demo(env: ManagerBasedRLEnv, actions: list, demo_name: str, delay: float, init_states: dict = None):
     print(f"\n--- Replaying {demo_name} ({len(actions)} steps) ---")
     env.reset()
+
+    if init_states:
+        # Override object and target initial states
+        if "init_object_pos" in init_states:
+            obj_state = env.scene["object"].data.default_root_state.clone()
+            obj_state[:, :3] = torch.tensor(init_states["init_object_pos"], device=env.device)
+            obj_state[:, 3:7] = torch.tensor(init_states["init_object_quat"], device=env.device)
+            env.scene["object"].write_root_state_to_sim(obj_state)
+            
+        if "init_target_pos" in init_states:
+            tgt_state = env.scene["target"].data.default_root_state.clone()
+            tgt_state[:, :3] = torch.tensor(init_states["init_target_pos"], device=env.device)
+            tgt_state[:, 3:7] = torch.tensor(init_states["init_target_quat"], device=env.device)
+            env.scene["target"].write_root_state_to_sim(tgt_state)
 
     for step_idx, act in enumerate(actions):
         if not simulation_app.is_running():
@@ -2877,12 +2894,156 @@ def main():
 
         for key in target_demos:
             actions = data_grp[key]["actions"][:]
-            replay_single_demo(env, actions, key, args_cli.delay)
+            init_states = None
+            if "init_object_pos" in data_grp[key]:
+                init_states = {
+                    "init_object_pos": data_grp[key]["init_object_pos"][:],
+                    "init_object_quat": data_grp[key]["init_object_quat"][:],
+                    "init_target_pos": data_grp[key]["init_target_pos"][:],
+                    "init_target_quat": data_grp[key]["init_target_quat"][:],
+                }
+            replay_single_demo(env, actions, key, args_cli.delay, init_states)
             time.sleep(1.0)
 
     env.close()
     simulation_app.close()
 
+
+if __name__ == "__main__":
+    main()
+EOF_RECONSTRUCT
+
+echo "📁 생성 중: scripts/replay_demos_parallel.py"
+mkdir -p 'scripts'
+cat << 'EOF_RECONSTRUCT' > 'scripts/replay_demos_parallel.py'
+import argparse
+import os
+import sys
+import time
+import h5py
+import torch
+
+from isaaclab.app import AppLauncher
+
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+PARENT_ROOT = os.path.dirname(PROJECT_ROOT)
+for path in [PROJECT_ROOT, PARENT_ROOT]:
+    if path not in sys.path:
+        sys.path.insert(0, path)
+
+parser = argparse.ArgumentParser(description="Replay multiple demonstrations in parallel.")
+parser.add_argument(
+    "--dataset",
+    type=str,
+    default=os.path.join(PROJECT_ROOT, "data", "demos.hdf5"),
+    help="Path to HDF5 dataset file.",
+)
+parser.add_argument("--num_parallel", type=int, default=4, help="Number of demos to play simultaneously.")
+parser.add_argument("--delay", type=float, default=0.02, help="Delay between steps in seconds.")
+AppLauncher.add_app_launcher_args(parser)
+args_cli = parser.parse_args()
+
+app_launcher = AppLauncher(args_cli)
+simulation_app = app_launcher.app
+
+import gymnasium as gym
+from isaaclab.envs import ManagerBasedRLEnv
+try:
+    from dual_arm_il.configs.env_cfg import DualArmILEnvCfg
+except ModuleNotFoundError:
+    from configs.env_cfg import DualArmILEnvCfg
+
+def main():
+    if not os.path.exists(args_cli.dataset):
+        raise FileNotFoundError(f"Dataset not found: {args_cli.dataset}")
+
+    with h5py.File(args_cli.dataset, "r") as f:
+        data_grp = f["data"]
+        demo_keys = sorted([k for k in data_grp.keys() if k.startswith("demo_")], key=lambda x: int(x.split("_")[1]))
+
+        if len(demo_keys) == 0:
+            print("[Replay] No demonstrations found in dataset!")
+            simulation_app.close()
+            return
+            
+        num_parallel = min(args_cli.num_parallel, len(demo_keys))
+        target_demos = demo_keys[:num_parallel]
+        print(f"[Replay] Preparing to play {num_parallel} demos in parallel: {target_demos}")
+
+        # Load all actions for the selected demos
+        all_actions = []
+        all_init_states = []
+        max_length = 0
+        for key in target_demos:
+            acts = data_grp[key]["actions"][:]
+            all_actions.append(acts)
+            if len(acts) > max_length:
+                max_length = len(acts)
+            if "init_object_pos" in data_grp[key]:
+                all_init_states.append({
+                    "init_object_pos": data_grp[key]["init_object_pos"][:],
+                    "init_object_quat": data_grp[key]["init_object_quat"][:],
+                    "init_target_pos": data_grp[key]["init_target_pos"][:],
+                    "init_target_quat": data_grp[key]["init_target_quat"][:],
+                })
+            else:
+                all_init_states.append(None)
+
+    # Setup environment with num_envs = num_parallel
+    env_cfg = DualArmILEnvCfg()
+    env_cfg.sim.device = args_cli.device
+    env_cfg.scene.num_envs = num_parallel
+    gym.register(
+        id="Isaac-Dual-Arm-IL-v0",
+        entry_point="isaaclab.envs:ManagerBasedRLEnv",
+        kwargs={"env_cfg_entry_point": DualArmILEnvCfg},
+        disable_env_checker=True,
+    )
+    env: ManagerBasedRLEnv = gym.make("Isaac-Dual-Arm-IL-v0", cfg=env_cfg).unwrapped
+
+    env.reset()
+    
+    # Override initial states for each parallel environment
+    if any(s is not None for s in all_init_states):
+        obj_state = env.scene["object"].data.default_root_state.clone()
+        tgt_state = env.scene["target"].data.default_root_state.clone()
+        
+        for i, s in enumerate(all_init_states):
+            if s is not None:
+                obj_state[i, :3] = torch.tensor(s["init_object_pos"], device=env.device)
+                obj_state[i, 3:7] = torch.tensor(s["init_object_quat"], device=env.device)
+                tgt_state[i, :3] = torch.tensor(s["init_target_pos"], device=env.device)
+                tgt_state[i, 3:7] = torch.tensor(s["init_target_quat"], device=env.device)
+                
+        env.scene["object"].write_root_state_to_sim(obj_state)
+        env.scene["target"].write_root_state_to_sim(tgt_state)
+
+    print(f"\n--- Starting parallel replay (Max steps: {max_length}) ---")
+    
+    # Run loop
+    for step_idx in range(max_length):
+        if not simulation_app.is_running():
+            break
+
+        # Construct batched action [num_envs, act_dim]
+        # If a demo has finished, repeat its last action
+        batched_actions = []
+        for i in range(num_parallel):
+            acts = all_actions[i]
+            idx = min(step_idx, len(acts) - 1)
+            batched_actions.append(acts[idx])
+            
+        act_t = torch.tensor(batched_actions, dtype=torch.float32, device=args_cli.device)
+        env.step(act_t)
+
+        if args_cli.delay > 0:
+            time.sleep(args_cli.delay)
+
+    print("Finished parallel replay.")
+    time.sleep(2.0)
+    
+    env.close()
+    simulation_app.close()
 
 if __name__ == "__main__":
     main()
@@ -3264,7 +3425,7 @@ def solve_dls_ik(
     return delta_q.unsqueeze(0)
 
 
-def save_episode_to_hdf5(hdf5_path: str, ep_idx: int, observations: list, actions: list, rewards: list):
+def save_episode_to_hdf5(hdf5_path: str, ep_idx: int, observations: list, actions: list, rewards: list, init_states: dict = None):
     """Save a single successful demonstration to the HDF5 file."""
     os.makedirs(os.path.dirname(os.path.abspath(hdf5_path)), exist_ok=True)
 
@@ -3281,6 +3442,9 @@ def save_episode_to_hdf5(hdf5_path: str, ep_idx: int, observations: list, action
         demo_group.create_dataset("actions", data=act_array, compression="gzip")
         demo_group.create_dataset("rewards", data=rew_array, compression="gzip")
         demo_group.attrs["num_samples"] = len(act_array)
+        if init_states:
+            for k, v in init_states.items():
+                demo_group.create_dataset(k, data=v)
 
         # Update total samples attribute in data group
         total_samples = f["data"].attrs.get("total", 0) + len(act_array)
@@ -3337,6 +3501,13 @@ def main():
     while simulation_app.is_running() and collected_count < target_count:
         obs, _ = env.reset()
         teleop.reset()
+        
+        init_states = {
+            "init_object_pos": env.scene["object"].data.root_pos_w.clone().squeeze(0).cpu().numpy(),
+            "init_object_quat": env.scene["object"].data.root_quat_w.clone().squeeze(0).cpu().numpy(),
+            "init_target_pos": env.scene["target"].data.root_pos_w.clone().squeeze(0).cpu().numpy(),
+            "init_target_quat": env.scene["target"].data.root_quat_w.clone().squeeze(0).cpu().numpy(),
+        }
 
         # Commanded joint targets buffer (starts at current joint positions)
         current_joint_pos = robot.data.joint_pos.clone()
@@ -3407,6 +3578,7 @@ def main():
                     ep_obs,
                     ep_actions,
                     ep_rewards,
+                    init_states,
                 )
                 collected_count += 1
                 teleop.reset_episode_flags()

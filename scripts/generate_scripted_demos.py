@@ -350,6 +350,13 @@ def main():
     while simulation_app.is_running() and collected_count < target_count:
         obs, _ = env.reset()
 
+        init_states = {
+            "init_object_pos": env.scene["object"].data.root_pos_w.clone().squeeze(0).cpu().numpy(),
+            "init_object_quat": env.scene["object"].data.root_quat_w.clone().squeeze(0).cpu().numpy(),
+            "init_target_pos": env.scene["target"].data.root_pos_w.clone().squeeze(0).cpu().numpy(),
+            "init_target_quat": env.scene["target"].data.root_quat_w.clone().squeeze(0).cpu().numpy(),
+        }
+
         # Initialize commanded joint targets from the robot's safe standby positions
         commanded_left = left_standby_joints.clone()
         commanded_right = right_standby_joints.clone()

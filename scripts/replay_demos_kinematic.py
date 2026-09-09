@@ -77,6 +77,14 @@ def main():
 
     env_cfg = DualArmILEnvCfg()
     env_cfg.sim.device = args_cli.device
+    
+    # FOR KINEMATIC REPLAY: Disable physics on the object so it doesn"t get pushed by collisions!
+    if hasattr(env_cfg.scene.object, "spawn"):
+        from isaaclab.sim import RigidBodyPropertiesCfg
+        env_cfg.scene.object.spawn.rigid_props = RigidBodyPropertiesCfg(
+            kinematic_enabled=True,
+            disable_gravity=True,
+        )
     env_cfg.scene.num_envs = num_parallel
     gym.register(
         id="Isaac-Dual-Arm-IL-v0",

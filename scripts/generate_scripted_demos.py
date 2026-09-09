@@ -855,6 +855,9 @@ def main():
                         ep_obs,
                         ep_actions,
                         ep_rewards,
+                        init_states,
+                        ep_obj_traj,
+                        ep_joint_traj,
                     )
                     collected_count += 1
                     print(f"  [✓] Successfully collected Demo #{collected_count-1} in {step} steps! (dist={dist_to_target:.3f}m)")

@@ -418,4 +418,10 @@ class VisuomotorSceneCfg(DualArmSceneCfg):
 > 
 > 6. **스크립트 기반 고품질 데모 생성기**:
 >    `generate_scripted_demos.py`를 작성하여 DLS IK(역운동학)를 이용해 부드러운 양팔 궤적(Pick & Place)을 자동으로 생성하고 HDF5로 저장하도록 해 줘. 에피소드 저장 시에는 반드시 `image` 관측치 데이터도 함께 저장해야 해.
+>
+> 7. **데이터셋 지연 로딩 (OOM 프리징 방지)**:
+>    수십 GB에 달하는 이미지 데이터가 포함된 HDF5를 로드하는 `il_dataset.py`를 작성할 때, `__init__`에서 절대 이미지 배열 전체를 메모리에 올리지 마. `__getitem__` 내부에서 `h5py.File`을 통해 그때그때 필요한 시퀀스만 읽어오는 지연 로딩(Lazy-loading) 방식으로 구현해야 시스템 프리징을 막을 수 있어.
+>
+> 8. **TensorBoard 로깅 적용**:
+>    학습 스크립트(`train.py`) 작성 시 `torch.utils.tensorboard`의 `SummaryWriter`를 도입하여 Train/Val Loss와 Learning Rate가 기록되도록 코드를 구성해 줘.
 > **[복사할 프롬프트 끝]**

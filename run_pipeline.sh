@@ -7,7 +7,7 @@ set -e  # 에러 발생 시 즉시 종료
 
 # 설정 (자율적으로 수정 가능)
 ALGO="diffusion"
-NUM_DEMOS=500   # Handover는 난이도가 높으므로 500개 권장
+NUM_DEMOS=2000   # Handover는 난이도가 높으므로 500개 권장
 EPOCHS=1500     # 학습 에폭 (150은 너무 적으므로 1500 추천)
 RUN_SEQ_EVAL=false  # 순차 평가(eval.py)를 실행할지 여부 (true/false)
 PYTHON_EXEC="~/isaac_lab/bin/python"
@@ -22,7 +22,7 @@ echo "==========================================================================
 
 # 2. 데이터 수집
 echo -e "\n[1/4] 🎥 $NUM_DEMOS 개의 데모 데이터 수집 중..."
-eval $PYTHON_EXEC scripts/generate_scripted_demos.py --num_demos $NUM_DEMOS --headless
+eval $PYTHON_EXEC scripts/generate_scripted_demos_parallel.py --num_demos $NUM_DEMOS --num_envs 16 --headless
 echo "✅ 데이터 수집 완료."
 
 # 3. 모델 학습

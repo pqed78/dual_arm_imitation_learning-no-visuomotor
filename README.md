@@ -26,7 +26,7 @@ It supports the entire pipeline, from teleoperation demonstration data collectio
 │   ├── diffusion/             # 1D Temporal UNet Diffusion Policy (Chi et al. 2023)
 │   └── act/                   # CVAE + Transformer ACT (Zhao et al. 2023)
 ├── scripts/                   # Execution scripts
-│   ├── generate_scripted_demos.py  # [Recommended] Script-based high-quality single demo auto-generator
+│   ├── generate_scripted_demos_parallel.py  # [Recommended] Script-based high-quality single demo auto-generator
 
 │   ├── replay_demos.py         # Verify collected HDF5 demos via simulation replay
 │   ├── train.py               # Integrated high-speed GPU training script for the 3 algorithms
@@ -64,12 +64,12 @@ To intuitively control both arms (14 DoF + 2 grippers), an **Active-Arm Toggle (
 
 ### ① Step 1: Demo Data Collection (Choose 1 of 2 methods)
 
-#### [Method A] Script-based Single Demo Auto-generator (`generate_scripted_demos.py`)
+#### [Method A] Script-based Single Demo Auto-generator (`generate_scripted_demos_parallel.py`)
 Generates perfect, high-quality demos sequentially using a single robot when debugging or visual confirmation is needed. (Wait time optimization patch applied)
 
 ```bash
 # Auto-collect 50 demos while watching the GUI screen
-python scripts/generate_scripted_demos.py --num_demos=50
+python scripts/generate_scripted_demos_parallel.py --num_demos=50
 ```
 
 #### [Method B] Manual Keyboard Teleoperation Collection (`collect_demos.py`)
@@ -171,7 +171,7 @@ Isaac Sim 환경에서의 텔레오퍼레이션(수동 조작) 시연 데이터 
 │   ├── diffusion/             # 1D Temporal UNet Diffusion Policy (Chi et al. 2023)
 │   └── act/                   # CVAE + Transformer ACT (Zhao et al. 2023)
 ├── scripts/                   # 실행 스크립트
-│   ├── generate_scripted_demos.py  # [추천] 스크립트 기반 고품질 단일 데모 자동 생성기
+│   ├── generate_scripted_demos_parallel.py  # [추천] 스크립트 기반 고품질 단일 데모 자동 생성기
 
 │   ├── replay_demos.py         # 수집된 HDF5 데모 시뮬레이션 재생 검증
 │   ├── train.py               # 3종 알고리즘 통합 고속 GPU 학습 스크립트
@@ -209,12 +209,12 @@ Isaac Sim 환경에서의 텔레오퍼레이션(수동 조작) 시연 데이터 
 
 ### ① 1단계: 데모 데이터 수집 (2가지 방법 중 선택)
 
-#### [방법 A] 스크립트 기반 단일 데모 자동 생성기 (`generate_scripted_demos.py`)
+#### [방법 A] 스크립트 기반 단일 데모 자동 생성기 (`generate_scripted_demos_parallel.py`)
 디버깅이나 시각적 확인이 필요할 때 1대의 로봇이 순차적으로 완벽한 고품질 데모를 생성합니다. (대기 시간 최적화 패치 적용 완료)
 
 ```bash
 # GUI 화면을 보면서 50개 데모 자동 수집
-python scripts/generate_scripted_demos.py --num_demos=50
+python scripts/generate_scripted_demos_parallel.py --num_demos=50
 ```
 
 #### [방법 B] 키보드 텔레오퍼레이션 수동 수집 (`collect_demos.py`)
@@ -309,7 +309,7 @@ python scripts/eval.py --algo=bc --num_episodes=10
 >    - CLI의 `--algo` 인자를 통해 위 3가지 알고리즘 중 하나를 유연하게 선택해 학습할 수 있어야 해.
 >    - 검증 손실(Validation Loss)이 갱신될 때마다 `best_model.pt`로 저장하는 로직을 포함해 줘.
 >    - **[중요] TensorBoard 연동:** `torch.utils.tensorboard.SummaryWriter`를 사용해 Train Loss, Val Loss, Learning Rate의 변화 추이를 `runs/` 폴더에 실시간으로 기록하는 코드를 필수로 넣어 줘.
-> 6. **자동 데모 수집 (`scripts/generate_scripted_demos.py`):** 사람의 키보드 조작 없이 코드(State Machine)로 로봇을 제어하여 완벽한 데모를 대량(예: 50개)으로 자동 수집하는 스크립트를 작성해 줘.
+> 6. **자동 데모 수집 (`scripts/generate_scripted_demos_parallel.py`):** 사람의 키보드 조작 없이 코드(State Machine)로 로봇을 제어하여 완벽한 데모를 대량(예: 50개)으로 자동 수집하는 스크립트를 작성해 줘.
 > 7. **검증 및 평가 (`scripts/eval.py`, `replay_demos.py`):** 학습이 완료된 가중치 모델을 Isaac Sim 환경에 띄워 실제 미션 성공률을 Closed-loop로 측정하는 평가 스크립트와, 수집된 데모 파일이 정상적인지 시뮬레이션에서 재현(Replay)하는 스크립트를 구현해 줘.
 
 > 

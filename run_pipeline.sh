@@ -7,8 +7,9 @@ set -e  # 에러 발생 시 즉시 종료
 
 # 설정 (자율적으로 수정 가능)
 ALGO="diffusion"
-NUM_DEMOS=1000   # Handover는 난이도가 높으므로 500개 권장
+NUM_DEMOS=500   # Handover는 난이도가 높으므로 500개 권장
 EPOCHS=1500     # 학습 에폭 (150은 너무 적으므로 1500 추천)
+RUN_SEQ_EVAL=false  # 순차 평가(eval.py)를 실행할지 여부 (true/false)
 PYTHON_EXEC="~/isaac_lab/bin/python"
 
 echo "============================================================================="
@@ -30,12 +31,16 @@ eval $PYTHON_EXEC scripts/train.py --algo $ALGO --epochs $EPOCHS
 echo "✅ 학습 완료."
 
 # 4. 순차 평가 (eval.py)
-echo -e "\n[3/4] ⚖️ 순차 평가 (eval.py) 10 에피소드 진행 중..."
-SEQ_LOG="results_eval_seq.txt"
-eval $PYTHON_EXEC scripts/eval.py --algo $ALGO --num_episodes 10 --headless > $SEQ_LOG 2>&1 || true
-SUCCESS_COUNT=$(grep -c "SUCCESS!" $SEQ_LOG || true)
-echo "✅ 순차 평가 완료. (성공 횟수: $SUCCESS_COUNT / 10)"
-echo "[eval.py] Success Count: $SUCCESS_COUNT / 10" >> pipeline_summary.txt
+if [ "$RUN_SEQ_EVAL" = true ] || [ "$RUN_SEQ_EVAL" = "true" ]; then
+    echo -e "\n[3/4] ⚖️ 순차 평가 (eval.py) 10 에피소드 진행 중..."
+    SEQ_LOG="results_eval_seq.txt"
+    eval $PYTHON_EXEC scripts/eval.py --algo $ALGO --num_episodes 10 --headless > $SEQ_LOG 2>&1 || true
+    SUCCESS_COUNT=$(grep -c "SUCCESS!" $SEQ_LOG || true)
+    echo "✅ 순차 평가 완료. (성공 횟수: $SUCCESS_COUNT / 10)"
+    echo "[eval.py] Success Count: $SUCCESS_COUNT / 10" >> pipeline_summary.txt
+else
+    echo -e "\n[3/4] ⏭️ 순차 평가 (eval.py) 건너뜀 (RUN_SEQ_EVAL=false)"
+fi
 
 # 5. 병렬 평가 (eval_parallel.py)
 echo -e "\n[4/4] 🚀 병렬 평가 (eval_parallel.py) 100 에피소드 진행 중..."

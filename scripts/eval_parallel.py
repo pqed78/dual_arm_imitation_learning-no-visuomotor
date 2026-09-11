@@ -19,7 +19,7 @@ parser.add_argument("--algo", type=str, required=True, choices=["bc", "diffusion
 parser.add_argument("--checkpoint", type=str, required=True)
 parser.add_argument("--num_episodes", type=int, default=100, help="Total episodes to evaluate")
 parser.add_argument("--num_envs", type=int, default=16, help="Number of parallel environments")
-parser.add_argument("--max_steps_per_ep", type=int, default=500)
+parser.add_argument("--max_steps_per_ep", type=int, default=1000)
 
 AppLauncher.add_app_launcher_args(parser)
 args_cli = parser.parse_args()
@@ -133,6 +133,11 @@ def main():
 
                 elif algo == "diffusion":
                     obs_queue.append(norm_obs)
+                    if step == 0:
+                        max_val, max_idx = torch.abs(norm_obs[0]).max(dim=0)
+                        print(f'Env 0 MAX norm_obs: {max_val.item():.3f} at index {max_idx.item()}')
+                        max_val1, max_idx1 = torch.abs(norm_obs[1]).max(dim=0)
+                        print(f'Env 1 MAX norm_obs: {max_val1.item():.3f} at index {max_idx1.item()}')
                     while len(obs_queue) < obs_horizon:
                         obs_queue.append(norm_obs)
 

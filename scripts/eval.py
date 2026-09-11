@@ -32,7 +32,7 @@ parser.add_argument("--algo", type=str, default="diffusion", choices=["bc", "dif
 parser.add_argument("--checkpoint", type=str, default=None, help="Path to checkpoint (.pt).")
 parser.add_argument("--stats", type=str, default=None, help="Path to normalization stats.pkl.")
 parser.add_argument("--num_episodes", type=int, default=10, help="Number of evaluation episodes.")
-parser.add_argument("--max_steps_per_ep", type=int, default=700, help="Max steps per episode (~23 seconds at 30Hz).")
+parser.add_argument("--max_steps_per_ep", type=int, default=1000, help="Max steps per episode (~33 seconds at 30Hz).")
 AppLauncher.add_app_launcher_args(parser)
 args_cli = parser.parse_args()
 
@@ -145,6 +145,8 @@ def main():
 
             # Extract and normalize observation
             raw_obs = obs["policy"].squeeze(0)  # (obs_dim,)
+            if step == 0:
+                print(f"raw_obs min/max: {raw_obs.min().item():.3f}, {raw_obs.max().item():.3f}")
             norm_obs = (raw_obs - obs_mean) / obs_std
 
             with torch.no_grad():

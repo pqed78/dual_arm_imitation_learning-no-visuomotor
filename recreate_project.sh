@@ -280,19 +280,22 @@ python scripts/train.py --algo=act --epochs=150
 
 ---
 
-### ④ 4단계: Isaac Sim 시뮬레이션 평가 (`eval.py`)
-학습된 모델을 시뮬레이션 로봇에 연결하여 실제 클로즈드 루프 성공률을 측정합니다.
+### ④ 4단계: Isaac Sim 시뮬레이션 평가 (`eval.py` / `eval_parallel.py`)
+학습된 모델을 시뮬레이션 로봇에 연결하여 실제 클로즈드 루프 성공률을 측정합니다. 모델의 성능을 빠르고 정확하게 검증하기 위해 두 가지 평가 모드를 제공합니다.
 
-```bash
-# Diffusion Policy 평가
-python scripts/eval.py --algo=diffusion --num_episodes=10
+1. **병렬 고속 평가 (`eval_parallel.py`) [추천]**
+   여러 환경(Environment)을 동시에 띄워 단기간에 대량의 에피소드를 평가합니다.
+   ```bash
+   # 16개의 환경에서 총 100개의 에피소드를 병렬로 평가
+   python scripts/eval_parallel.py --algo=diffusion --num_episodes=100 --num_envs=16 --headless
+   ```
 
-# ACT 평가 (Temporal Ensembling 적용)
-python scripts/eval.py --algo=act --num_episodes=10
-
-# Behavior Cloning 평가
-python scripts/eval.py --algo=bc --num_episodes=10
-```
+2. **단일 환경 순차 평가 (`eval.py`)**
+   시각적 확인을 위해 하나의 환경에서 에피소드를 순차적으로 실행하며 평가합니다. ACT, BC 등 다른 알고리즘도 동일하게 적용 가능합니다.
+   ```bash
+   # 단일 환경에서 순차적으로 10개의 에피소드 평가 (GUI 시각화 모드)
+   python scripts/eval.py --algo=diffusion --num_episodes=10
+   ```
 
 ---
 
@@ -365,8 +368,10 @@ chmod +x recreate_project.sh
 ```
 
 
-## Pipeline Execution
-You can run the full pipeline (Data Collection -> Training -> Sequential Eval -> Parallel Eval) using the provided bash script:
+## 전체 파이프라인 자동 실행 (Pipeline Execution)
+제공되는 쉘 스크립트를 사용하면 **데이터 수집 ➔ 모델 학습 ➔ 순차 평가 ➔ 병렬 평가**로 이어지는 전체 과정을 한 번에 자동으로 실행할 수 있습니다.
+You can run the full pipeline (Data Collection ➔ Training ➔ Sequential Eval ➔ Parallel Eval) using the provided bash script:
+
 ```bash
 ./run_pipeline.sh
 ```

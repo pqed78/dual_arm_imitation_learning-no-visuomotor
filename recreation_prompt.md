@@ -581,7 +581,7 @@ num_inference_steps: 20            # Not used if use_ddim=False
 # Training hyperparameters
 learning_rate: 1.0e-4
 weight_decay: 1.0e-6
-batch_size: 64
+batch_size: 256
 epochs: 150
 lr_scheduler: "cosine"
 lr_warmup_steps: 500
@@ -2032,8 +2032,8 @@ def main():
     train_size = len(full_dataset) - val_size
     train_dataset, val_dataset = random_split(full_dataset, [train_size, val_size])
 
-    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, drop_last=True)
-    val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
+    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, drop_last=True, num_workers=4, pin_memory=True, persistent_workers=True)
+    val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, num_workers=4, pin_memory=True, persistent_workers=True)
 
     # Instantiate Model
     model = build_model(args.algo, cfg, full_dataset.obs_dim, full_dataset.act_dim)

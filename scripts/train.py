@@ -182,17 +182,24 @@ def main():
     train_size = len(full_dataset) - val_size
     train_dataset, val_dataset = random_split(full_dataset, [train_size, val_size])
 
-    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, drop_last=True)
-    val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
+    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, drop_last=True, num_workers=4, pin_memory=True, persistent_workers=True)
+    val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, num_workers=4, pin_memory=True, persistent_workers=True)
 
     # Instantiate Model
     model = build_model(args.algo, cfg, full_dataset.obs_dim, full_dataset.act_dim)
     model.to(args.device)
     
+    start_epoch = 0
     if args.resume:
         if os.path.exists(args.resume):
             print(f"[Model] Resuming training from checkpoint: {args.resume}")
-            model.load_state_dict(torch.load(args.resume, map_location=args.device, weights_only=True))
+            ckpt = torch.load(args.resume, map_location=args.device, weights_only=False)
+            if isinstance(ckpt, dict) and "model_state_dict" in ckpt:
+                model.load_state_dict(ckpt["model_state_dict"])
+                start_epoch = ckpt.get('epoch', 0)
+                print(f"  -> Resumed from epoch {start_epoch}")
+            else:
+                model.load_state_dict(ckpt)
         else:
             print(f"[Warning] Checkpoint not found: {args.resume}. Starting from scratch.")
 
@@ -205,8 +212,9 @@ def main():
 
     best_val_loss = float("inf")
 
+    print("\n[Training Started]")
     # Training Loop
-    for epoch in range(1, epochs + 1):
+    for epoch in range(start_epoch + 1, epochs + 1):
         model.train()
         train_loss_sum = 0.0
         num_train_batches = 0
@@ -270,7 +278,18 @@ def main():
         # Periodic checkpoint
         if epoch % cfg.get("save_interval", 20) == 0:
             ckpt_path = os.path.join(save_dir, f"checkpoint_epoch_{epoch}.pt")
-            torch.save(model.state_dict(), ckpt_path)
+            torch.save(
+                {
+                    "epoch": epoch,
+                    "algo": args.algo,
+                    "config": cfg,
+                    "obs_dim": full_dataset.obs_dim,
+                    "act_dim": full_dataset.act_dim,
+                    "model_state_dict": model.state_dict(),
+                    "val_loss": avg_val_loss,
+                },
+                ckpt_path,
+            )
 
     print("\n[Training Complete]")
     print(f"Best model saved at: {os.path.join(save_dir, 'best_model.pt')}")

@@ -22,7 +22,7 @@ num_inference_steps: 20            # Not used if use_ddim=False
 # Training hyperparameters
 learning_rate: 1.0e-4
 weight_decay: 1.0e-6
-batch_size: 64
+batch_size: 256
 epochs: 150
 lr_scheduler: "cosine"
 lr_warmup_steps: 500

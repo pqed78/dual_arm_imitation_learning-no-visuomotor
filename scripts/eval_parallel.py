@@ -213,6 +213,20 @@ def main():
     print(f" Success Rate   : {success_rate:.1f}%")
     print("=" * 60)
 
+    import json
+    from datetime import datetime
+    result_dict = {
+        "algo": algo,
+        "total_evaluated": total_evaluated,
+        "successes": total_success,
+        "success_rate": success_rate,
+        "timestamp": datetime.now().isoformat()
+    }
+    result_path = os.path.join(save_dir, f"eval_results_parallel.json")
+    with open(result_path, "w") as f:
+        json.dump(result_dict, f, indent=4)
+    print(f" Saved evaluation results to: {result_path}")
+
     env.close()
     simulation_app.close()
 

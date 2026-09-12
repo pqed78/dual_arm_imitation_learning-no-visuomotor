@@ -145,7 +145,7 @@ def main():
                         # Stack to (To, num_envs, obs_dim) -> Permute to (num_envs, To, obs_dim)
                         obs_tensor = torch.stack(list(obs_queue), dim=0).permute(1, 0, 2)
                         infer_steps = model.num_train_timesteps
-                        pred_act_chunk = model.predict_action(obs_tensor, num_inference_steps=infer_steps, use_ddim=False)
+                        pred_act_chunk = model.predict_action(obs_tensor, num_inference_steps=15, use_ddim=True)
                         
                         for a_idx in range(min(act_horizon, pred_act_chunk.shape[1])):
                             act_unnorm = pred_act_chunk[:, a_idx, :] * act_std + act_mean

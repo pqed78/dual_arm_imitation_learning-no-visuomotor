@@ -556,7 +556,7 @@ cat << 'EOF_RECONSTRUCT' > 'configs/diffusion_cfg.yaml'
 algo: "diffusion"
 
 # Horizon parameters
-pred_horizon: 16       # Number of future actions predicted by model (Tp)
+pred_horizon: 24       # Number of future actions predicted by model (Tp)
 obs_horizon: 2         # Number of historical observations conditioned on (To)
 act_horizon: 8         # Number of action steps executed before replanning (Ta)
 
@@ -567,7 +567,7 @@ n_groups: 8
 cond_predict_scale: true
 
 # Diffusion Scheduler (DDPM / DDIM)
-num_train_timesteps: 20
+num_train_timesteps: 100
 beta_schedule: "squaredcos_cap_v2" # or "linear"
 prediction_type: "epsilon"         # predict noise epsilon or sample x_0
 num_inference_steps: 20            # Not used if use_ddim=False
@@ -2312,7 +2312,7 @@ def main():
                     if len(action_queue) == 0 and future is None:
                         obs_tensor = torch.stack(list(obs_queue), dim=0).unsqueeze(0)
                         infer_steps = model.num_train_timesteps
-                        pred_act_chunk = model.predict_action(obs_tensor, num_inference_steps=infer_steps, use_ddim=False).squeeze(0)
+                        pred_act_chunk = model.predict_action(obs_tensor, num_inference_steps=15, use_ddim=True).squeeze(0)
                         for a_idx in range(min(act_horizon, len(pred_act_chunk))):
                             act_unnorm = pred_act_chunk[a_idx] * act_std + act_mean
                             action_queue.append(act_unnorm)
@@ -2322,7 +2322,7 @@ def main():
                         obs_tensor = torch.stack(list(obs_queue), dim=0).unsqueeze(0)
                         infer_steps = model.num_train_timesteps
                         step_at_request = step
-                        future = executor.submit(model.predict_action, obs_tensor, num_inference_steps=infer_steps, use_ddim=False)
+                        future = executor.submit(model.predict_action, obs_tensor, num_inference_steps=15, use_ddim=True)
 
                     # 3. If we run out of actions, retrieve the background compute result
                     if len(action_queue) == 0 and future is not None:
@@ -2563,7 +2563,7 @@ def main():
                         # Stack to (To, num_envs, obs_dim) -> Permute to (num_envs, To, obs_dim)
                         obs_tensor = torch.stack(list(obs_queue), dim=0).permute(1, 0, 2)
                         infer_steps = model.num_train_timesteps
-                        pred_act_chunk = model.predict_action(obs_tensor, num_inference_steps=infer_steps, use_ddim=False)
+                        pred_act_chunk = model.predict_action(obs_tensor, num_inference_steps=15, use_ddim=True)
                         
                         for a_idx in range(min(act_horizon, pred_act_chunk.shape[1])):
                             act_unnorm = pred_act_chunk[:, a_idx, :] * act_std + act_mean

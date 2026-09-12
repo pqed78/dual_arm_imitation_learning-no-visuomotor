@@ -3,7 +3,7 @@
 algo: "diffusion"
 
 # Horizon parameters
-pred_horizon: 24       # Number of future actions predicted by model (Tp)
+pred_horizon: 16       # Number of future actions predicted by model (Tp)
 obs_horizon: 2         # Number of historical observations conditioned on (To)
 act_horizon: 8         # Number of action steps executed before replanning (Ta)
 
@@ -14,7 +14,7 @@ n_groups: 8
 cond_predict_scale: true
 
 # Diffusion Scheduler (DDPM / DDIM)
-num_train_timesteps: 100
+num_train_timesteps: 20
 beta_schedule: "squaredcos_cap_v2" # or "linear"
 prediction_type: "epsilon"         # predict noise epsilon or sample x_0
 num_inference_steps: 20            # Not used if use_ddim=False

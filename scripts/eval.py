@@ -163,7 +163,7 @@ def main():
                     if len(action_queue) == 0 and future is None:
                         obs_tensor = torch.stack(list(obs_queue), dim=0).unsqueeze(0)
                         infer_steps = model.num_train_timesteps
-                        pred_act_chunk = model.predict_action(obs_tensor, num_inference_steps=infer_steps, use_ddim=False).squeeze(0)
+                        pred_act_chunk = model.predict_action(obs_tensor, num_inference_steps=15, use_ddim=True).squeeze(0)
                         for a_idx in range(min(act_horizon, len(pred_act_chunk))):
                             act_unnorm = pred_act_chunk[a_idx] * act_std + act_mean
                             action_queue.append(act_unnorm)
@@ -173,7 +173,7 @@ def main():
                         obs_tensor = torch.stack(list(obs_queue), dim=0).unsqueeze(0)
                         infer_steps = model.num_train_timesteps
                         step_at_request = step
-                        future = executor.submit(model.predict_action, obs_tensor, num_inference_steps=infer_steps, use_ddim=False)
+                        future = executor.submit(model.predict_action, obs_tensor, num_inference_steps=15, use_ddim=True)
 
                     # 3. If we run out of actions, retrieve the background compute result
                     if len(action_queue) == 0 and future is not None:

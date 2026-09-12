@@ -41,11 +41,14 @@ It supports the entire pipeline, from teleoperation demonstration data collectio
 │   ├── diffusion/             # 1D Temporal UNet Diffusion Policy (Chi et al. 2023)
 │   └── act/                   # CVAE + Transformer ACT (Zhao et al. 2023)
 ├── scripts/                   # Execution scripts
-│   ├── generate_scripted_demos_parallel.py  # [Recommended] Script-based high-quality single demo auto-generator
-
-│   ├── replay_demos.py         # Verify collected HDF5 demos via simulation replay
+│   ├── generate_scripted_demos_parallel.py  # [Recommended] High-quality parallel demo auto-generator
+│   ├── replay_demos.py        # Verify collected HDF5 demos via simulation replay
 │   ├── train.py               # Integrated high-speed GPU training script for the 3 algorithms
-│   └── eval.py                # Policy rollout evaluation in Isaac Sim environment
+│   ├── eval.py                # Sequential single-environment evaluation script
+│   └── eval_parallel.py       # High-speed parallel environment evaluation script
+├── run_pipeline.sh            # Auto-runner script for full pipeline (Collect -> Train -> Eval)
+├── recreate_project.sh        # Project auto-reconstruction bash script
+├── recreation_prompt.md       # Master prompt for LLM project reconstruction
 ├── data/                      # Directory for collected demo files (.hdf5)
 └── checkpoints/               # Directory for trained model checkpoints
 ```

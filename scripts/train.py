@@ -203,6 +203,13 @@ def main():
         else:
             print(f"[Warning] Checkpoint not found: {args.resume}. Starting from scratch.")
 
+    if hasattr(torch, "compile") and args.device != "mps":
+        try:
+            print("[Model] Compiling model with torch.compile() for extreme speed...")
+            model = torch.compile(model)
+        except Exception as e:
+            print(f"[Warning] torch.compile failed ({e}), continuing with eager mode.")
+
     total_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
     print(f"[Model] {args.algo.upper()} created with {total_params:,} trainable parameters.")
 

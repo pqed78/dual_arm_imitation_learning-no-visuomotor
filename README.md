@@ -355,3 +355,27 @@ You can run the full pipeline (Data Collection -> Training -> Sequential Eval ->
 ```bash
 ./run_pipeline.sh
 ```
+
+
+## 7. MacOS (Apple Silicon) 학습 지원 및 투트랙(Two-track) 워크플로우
+
+이 프로젝트는 데이터 수집과 딥러닝 모델 학습이 완벽히 분리되어 있어, **MacOS 환경에서의 순수 모델 학습**을 완벽하게 지원합니다.
+
+### ❌ 데이터 수집 및 시뮬레이션 평가 (MacOS 구동 불가)
+Isaac Sim 시뮬레이터를 띄워야 하는 `scripts/generate_scripted_demos_parallel.py` 및 `scripts/eval.py`는 NVIDIA RTX GPU(Linux/Windows)가 필수적입니다.
+
+### ⭕ 인공지능 모델 학습 (`train.py`) (MacOS 구동 가능)
+학습 코드(`scripts/train.py`)는 Isaac Sim이나 Omniverse에 전혀 의존하지 않는 순수 PyTorch 스크립트입니다. 데이터 수집이 끝난 뒤, Mac으로 프로젝트 폴더 전체를 복사하면 쾌적한 학습이 가능합니다.
+
+**Mac 환경 학습 방법:**
+```bash
+# 1. Linux 장비에서 데이터(data/demos.hdf5) 수집 완료 후 전체 폴더 복사
+
+# 2. Mac 환경에서 필수 패키지만 설치
+pip install -r requirements.txt
+
+# 3. Apple Silicon (M1/M2/M3) MPS 가속을 이용해 모델 훈련
+python scripts/train.py --algo=diffusion --epochs=1500 --device=mps
+```
+
+> **Tip:** 학습이 끝나고 생성된 `checkpoints/{algo}/best_model.pt` 가중치 파일만 다시 Linux 장비로 가져가서 `eval.py`로 테스트하시면 가장 효율적인 작업 환경을 구성하실 수 있습니다.

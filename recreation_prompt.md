@@ -48,7 +48,7 @@ It supports the entire pipeline, from teleoperation demonstration data collectio
 │   └── act/                   # CVAE + Transformer ACT (Zhao et al. 2023)
 ├── scripts/                   # Execution scripts
 │   ├── generate_scripted_demos_parallel.py  # [Recommended] High-quality parallel demo auto-generator
-│   ├── replay_demos.py        # Verify collected HDF5 demos via simulation replay
+│   ├── replay_demos_kinematic.py        # Verify collected HDF5 demos via simulation replay
 │   ├── train.py               # Integrated high-speed GPU training script for the 3 algorithms
 │   ├── eval.py                # Sequential single-environment evaluation script
 │   └── eval_parallel.py       # High-speed parallel environment evaluation script
@@ -108,15 +108,15 @@ python teleop/collect_demos.py --num_demos=20
 
 ---
 
-### ② Step 2: Verify Collected Demos (`replay_demos.py`)
+### ② Step 2: Verify Collected Demos (`replay_demos_kinematic.py`)
 Replay the recorded HDF5 trajectories in the simulation physics environment to ensure they operate stably.
 
 ```bash
 # Replay demo 0
-python scripts/replay_demos.py --demo_idx=0
+python scripts/replay_demos_kinematic.py --demo_idx=0
 
 # Sequentially replay all collected demos
-python scripts/replay_demos.py --demo_idx=-1
+python scripts/replay_demos_kinematic.py --demo_idx=-1
 ```
 
 ---
@@ -197,7 +197,7 @@ Isaac Sim 환경에서의 텔레오퍼레이션(수동 조작) 시연 데이터 
 ├── scripts/                   # 실행 스크립트
 │   ├── generate_scripted_demos_parallel.py  # [추천] 스크립트 기반 고품질 단일 데모 자동 생성기
 
-│   ├── replay_demos.py         # 수집된 HDF5 데모 시뮬레이션 재생 검증
+│   ├── replay_demos_kinematic.py         # 수집된 HDF5 데모 시뮬레이션 재생 검증
 │   ├── train.py               # 3종 알고리즘 통합 고속 GPU 학습 스크립트
 │   └── eval.py                # Isaac Sim 환경에서 정책 롤아웃 평가
 ├── data/                      # 수집된 데모 파일 (.hdf5) 저장 경로
@@ -253,15 +253,15 @@ python teleop/collect_demos.py --num_demos=20
 
 ---
 
-### ② 2단계: 수집된 데모 검증 (`replay_demos.py`)
+### ② 2단계: 수집된 데모 검증 (`replay_demos_kinematic.py`)
 녹화된 HDF5 궤적이 시뮬레이션 물리 환경에서 안정적으로 동작하는지 재생해 봅니다.
 
 ```bash
 # 0번 데모 재생
-python scripts/replay_demos.py --demo_idx=0
+python scripts/replay_demos_kinematic.py --demo_idx=0
 
 # 전체 수집된 데모 순차 재생
-python scripts/replay_demos.py --demo_idx=-1
+python scripts/replay_demos_kinematic.py --demo_idx=-1
 ```
 
 ---
@@ -337,7 +337,7 @@ python scripts/train.py --algo=act --epochs=150
 >    - 검증 손실(Validation Loss)이 갱신될 때마다 `best_model.pt`로 저장하는 로직을 포함해 줘.
 >    - **[중요] TensorBoard 연동:** `torch.utils.tensorboard.SummaryWriter`를 사용해 Train Loss, Val Loss, Learning Rate의 변화 추이를 `runs/` 폴더에 실시간으로 기록하는 코드를 필수로 넣어 줘.
 > 6. **자동 데모 수집 (`scripts/generate_scripted_demos_parallel.py`):** 사람의 키보드 조작 없이 코드(State Machine)로 로봇을 제어하여 완벽한 데모를 대량(예: 50개)으로 자동 수집하는 스크립트를 작성해 줘.
-> 7. **검증 및 평가 (`scripts/eval.py`, `replay_demos.py`):** 학습이 완료된 가중치 모델을 Isaac Sim 환경에 띄워 실제 미션 성공률을 Closed-loop로 측정하는 평가 스크립트와, 수집된 데모 파일이 정상적인지 시뮬레이션에서 재현(Replay)하는 스크립트를 구현해 줘.
+> 7. **검증 및 평가 (`scripts/eval.py`, `replay_demos_kinematic.py`):** 학습이 완료된 가중치 모델을 Isaac Sim 환경에 띄워 실제 미션 성공률을 Closed-loop로 측정하는 평가 스크립트와, 수집된 데모 파일이 정상적인지 시뮬레이션에서 재현(Replay)하는 스크립트를 구현해 줘.
 
 > 
 > **[에이전트 필수 행동 수칙 (CRITICAL)]**
@@ -3499,6 +3499,184 @@ def main():
     print(f" Saved Dataset          : {args_cli.dataset_file}")
     print("=" * 60)
 
+    env.close()
+    simulation_app.close()
+
+if __name__ == "__main__":
+    main()
+
+```
+
+### `scripts/replay_demos_kinematic.py`
+```python
+import argparse
+import os
+import sys
+import time
+import h5py
+import torch
+
+from isaaclab.app import AppLauncher
+
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+PARENT_ROOT = os.path.dirname(PROJECT_ROOT)
+for path in [PROJECT_ROOT, PARENT_ROOT]:
+    if path not in sys.path:
+        sys.path.insert(0, path)
+
+parser = argparse.ArgumentParser(description="Kinematic Replay of multiple demonstrations (100% Visual Accuracy).")
+parser.add_argument("--dataset", type=str, default=os.path.join(PROJECT_ROOT, "data", "demos.hdf5"))
+parser.add_argument("--num_parallel", type=int, default=4, help="Number of demos to play simultaneously.")
+parser.add_argument("--delay", type=float, default=0.033, help="Delay between frames in seconds.")
+parser.add_argument("--record_video", action="store_true", help="Record viewport to video file.")
+AppLauncher.add_app_launcher_args(parser)
+args_cli = parser.parse_args()
+
+app_launcher = AppLauncher(args_cli)
+simulation_app = app_launcher.app
+
+import gymnasium as gym
+from isaaclab.envs import ManagerBasedRLEnv
+try:
+    from dual_arm_il.configs.env_cfg import DualArmILEnvCfg
+except ModuleNotFoundError:
+    from configs.env_cfg import DualArmILEnvCfg
+
+def main():
+    if not os.path.exists(args_cli.dataset):
+        raise FileNotFoundError(f"Dataset not found: {args_cli.dataset}")
+
+    with h5py.File(args_cli.dataset, "r") as f:
+        data_grp = f["data"]
+        demo_keys = sorted([k for k in data_grp.keys() if k.startswith("demo_")], key=lambda x: int(x.split("_")[1]))
+
+        if len(demo_keys) == 0:
+            print("[Replay] No demonstrations found in dataset!")
+            simulation_app.close()
+            return
+            
+        num_parallel = min(args_cli.num_parallel, len(demo_keys))
+        target_demos = demo_keys[:num_parallel]
+        print(f"[Kinematic Replay] Preparing to play {num_parallel} demos in parallel: {target_demos}")
+
+        # Check if kinematic data is available
+        if "object_poses" not in data_grp[target_demos[0]]:
+            print("ERROR: Dataset does not contain 'object_poses' and 'robot_joint_poses'.")
+            print("Please regenerate the dataset using the updated collect/generate scripts!")
+            simulation_app.close()
+            return
+
+        all_obj_traj = []
+        all_joint_traj = []
+        all_init_robot_pos = []
+        all_init_robot_quat = []
+        all_init_target_pos = []
+        all_init_target_quat = []
+        max_length = 0
+        
+        for key in target_demos:
+            obj_traj = data_grp[key]["object_poses"][:]
+            joint_traj = data_grp[key]["robot_joint_poses"][:]
+            all_obj_traj.append(obj_traj)
+            all_joint_traj.append(joint_traj)
+            if len(obj_traj) > max_length:
+                max_length = len(obj_traj)
+                
+            if "init_robot_pos" in data_grp[key]:
+                all_init_robot_pos.append(data_grp[key]["init_robot_pos"][:])
+                all_init_robot_quat.append(data_grp[key]["init_robot_quat"][:])
+            else:
+                all_init_robot_pos.append(None)
+                all_init_robot_quat.append(None)
+                
+            if "init_target_pos" in data_grp[key]:
+                all_init_target_pos.append(data_grp[key]["init_target_pos"][:])
+                all_init_target_quat.append(data_grp[key]["init_target_quat"][:])
+            else:
+                all_init_target_pos.append(None)
+                all_init_target_quat.append(None)
+
+    env_cfg = DualArmILEnvCfg()
+    env_cfg.sim.device = args_cli.device
+    
+    # FOR KINEMATIC REPLAY: Disable physics on the object so it doesn"t get pushed by collisions!
+    if hasattr(env_cfg.scene.object, "spawn"):
+        from isaaclab.sim import RigidBodyPropertiesCfg
+        env_cfg.scene.object.spawn.rigid_props = RigidBodyPropertiesCfg(
+            kinematic_enabled=True,
+            disable_gravity=True,
+        )
+    env_cfg.scene.num_envs = num_parallel
+    gym.register(
+        id="Isaac-Dual-Arm-IL-v0",
+        entry_point="isaaclab.envs:ManagerBasedRLEnv",
+        kwargs={"env_cfg_entry_point": DualArmILEnvCfg},
+        disable_env_checker=True,
+    )
+    render_mode = "rgb_array" if args_cli.record_video else None
+    env: ManagerBasedRLEnv = gym.make("Isaac-Dual-Arm-IL-v0", cfg=env_cfg, render_mode=render_mode).unwrapped
+
+    env.reset()
+    
+    print(f"\n--- Starting KINEMATIC parallel replay (Max steps: {max_length}) ---")
+    
+    obj_state = env.scene["object"].data.default_root_state.clone()
+    tgt_state = env.scene["target"].data.default_root_state.clone()
+    rob_state = env.scene["robot"].data.default_root_state.clone()
+    j_pos = env.scene["robot"].data.default_joint_pos.clone()
+    j_vel = env.scene["robot"].data.default_joint_vel.clone() * 0.0
+    
+    video_writer = None
+    if args_cli.record_video:
+        import imageio
+        os.makedirs("videos", exist_ok=True)
+        video_path = os.path.join("videos", "kinematic_replay.mp4")
+        video_writer = imageio.get_writer(video_path, fps=int(1/args_cli.delay))
+        print(f"[Video Recording] Saving to {video_path}")
+
+    # Run loop
+    for step_idx in range(max_length):
+        if not simulation_app.is_running():
+            break
+
+        for i in range(num_parallel):
+            o_traj = all_obj_traj[i]
+            j_traj = all_joint_traj[i]
+            idx = min(step_idx, len(o_traj) - 1)
+            
+            obj_state[i, :3] = torch.tensor(o_traj[idx, :3], device=env.device) + env.scene.env_origins[i]
+            obj_state[i, 3:7] = torch.tensor(o_traj[idx, 3:7], device=env.device)
+            j_pos[i] = torch.tensor(j_traj[idx], device=env.device)
+            
+            if all_init_target_pos[i] is not None:
+                tgt_state[i, :3] = torch.tensor(all_init_target_pos[i], device=env.device) + env.scene.env_origins[i]
+                tgt_state[i, 3:7] = torch.tensor(all_init_target_quat[i], device=env.device)
+                
+            if all_init_robot_pos[i] is not None:
+                rob_state[i, :3] = torch.tensor(all_init_robot_pos[i], device=env.device) + env.scene.env_origins[i]
+                rob_state[i, 3:7] = torch.tensor(all_init_robot_quat[i], device=env.device)
+            
+        env.scene["object"].write_root_state_to_sim(obj_state)
+        env.scene["target"].write_root_state_to_sim(tgt_state)
+        env.scene["robot"].write_root_state_to_sim(rob_state)
+        env.scene["robot"].write_joint_state_to_sim(j_pos, j_vel)
+        
+        # Step physics to render
+        env.sim.step()
+        
+        if video_writer is not None:
+            img = env.render()
+            if img is not None:
+                video_writer.append_data(img)
+        
+        if args_cli.delay > 0 and video_writer is None:
+            time.sleep(args_cli.delay)
+
+    print("Finished kinematic replay.")
+    if video_writer is not None:
+        video_writer.close()
+        print("Video saved.")
+    time.sleep(2.0)
     env.close()
     simulation_app.close()
 

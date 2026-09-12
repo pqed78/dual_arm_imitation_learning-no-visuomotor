@@ -17,6 +17,7 @@ parser = argparse.ArgumentParser(description="Kinematic Replay of multiple demon
 parser.add_argument("--dataset", type=str, default=os.path.join(PROJECT_ROOT, "data", "demos.hdf5"))
 parser.add_argument("--num_parallel", type=int, default=4, help="Number of demos to play simultaneously.")
 parser.add_argument("--delay", type=float, default=0.033, help="Delay between frames in seconds.")
+parser.add_argument("--record_video", action="store_true", help="Record viewport to video file.")
 AppLauncher.add_app_launcher_args(parser)
 args_cli = parser.parse_args()
 
@@ -101,7 +102,8 @@ def main():
         kwargs={"env_cfg_entry_point": DualArmILEnvCfg},
         disable_env_checker=True,
     )
-    env: ManagerBasedRLEnv = gym.make("Isaac-Dual-Arm-IL-v0", cfg=env_cfg).unwrapped
+    render_mode = "rgb_array" if args_cli.record_video else None
+    env: ManagerBasedRLEnv = gym.make("Isaac-Dual-Arm-IL-v0", cfg=env_cfg, render_mode=render_mode).unwrapped
 
     env.reset()
     
@@ -113,6 +115,14 @@ def main():
     j_pos = env.scene["robot"].data.default_joint_pos.clone()
     j_vel = env.scene["robot"].data.default_joint_vel.clone() * 0.0
     
+    video_writer = None
+    if args_cli.record_video:
+        import imageio
+        os.makedirs("videos", exist_ok=True)
+        video_path = os.path.join("videos", "kinematic_replay.mp4")
+        video_writer = imageio.get_writer(video_path, fps=int(1/args_cli.delay))
+        print(f"[Video Recording] Saving to {video_path}")
+
     # Run loop
     for step_idx in range(max_length):
         if not simulation_app.is_running():
@@ -143,10 +153,18 @@ def main():
         # Step physics to render
         env.sim.step()
         
-        if args_cli.delay > 0:
+        if video_writer is not None:
+            img = env.render()
+            if img is not None:
+                video_writer.append_data(img)
+        
+        if args_cli.delay > 0 and video_writer is None:
             time.sleep(args_cli.delay)
 
     print("Finished kinematic replay.")
+    if video_writer is not None:
+        video_writer.close()
+        print("Video saved.")
     time.sleep(2.0)
     env.close()
     simulation_app.close()

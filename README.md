@@ -27,7 +27,7 @@ It supports the entire pipeline, from teleoperation demonstration data collectio
 │   └── act/                   # CVAE + Transformer ACT (Zhao et al. 2023)
 ├── scripts/                   # Execution scripts
 │   ├── generate_scripted_demos_parallel.py  # [Recommended] High-quality parallel demo auto-generator
-│   ├── replay_demos.py        # Verify collected HDF5 demos via simulation replay
+│   ├── replay_demos_kinematic.py        # Verify collected HDF5 demos via simulation replay
 │   ├── train.py               # Integrated high-speed GPU training script for the 3 algorithms
 │   ├── eval.py                # Sequential single-environment evaluation script
 │   └── eval_parallel.py       # High-speed parallel environment evaluation script
@@ -87,15 +87,15 @@ python teleop/collect_demos.py --num_demos=20
 
 ---
 
-### ② Step 2: Verify Collected Demos (`replay_demos.py`)
+### ② Step 2: Verify Collected Demos (`replay_demos_kinematic.py`)
 Replay the recorded HDF5 trajectories in the simulation physics environment to ensure they operate stably.
 
 ```bash
 # Replay demo 0
-python scripts/replay_demos.py --demo_idx=0
+python scripts/replay_demos_kinematic.py --demo_idx=0
 
 # Sequentially replay all collected demos
-python scripts/replay_demos.py --demo_idx=-1
+python scripts/replay_demos_kinematic.py --demo_idx=-1
 ```
 
 ---
@@ -176,7 +176,7 @@ Isaac Sim 환경에서의 텔레오퍼레이션(수동 조작) 시연 데이터 
 ├── scripts/                   # 실행 스크립트
 │   ├── generate_scripted_demos_parallel.py  # [추천] 스크립트 기반 고품질 단일 데모 자동 생성기
 
-│   ├── replay_demos.py         # 수집된 HDF5 데모 시뮬레이션 재생 검증
+│   ├── replay_demos_kinematic.py         # 수집된 HDF5 데모 시뮬레이션 재생 검증
 │   ├── train.py               # 3종 알고리즘 통합 고속 GPU 학습 스크립트
 │   └── eval.py                # Isaac Sim 환경에서 정책 롤아웃 평가
 ├── data/                      # 수집된 데모 파일 (.hdf5) 저장 경로
@@ -232,15 +232,15 @@ python teleop/collect_demos.py --num_demos=20
 
 ---
 
-### ② 2단계: 수집된 데모 검증 (`replay_demos.py`)
+### ② 2단계: 수집된 데모 검증 (`replay_demos_kinematic.py`)
 녹화된 HDF5 궤적이 시뮬레이션 물리 환경에서 안정적으로 동작하는지 재생해 봅니다.
 
 ```bash
 # 0번 데모 재생
-python scripts/replay_demos.py --demo_idx=0
+python scripts/replay_demos_kinematic.py --demo_idx=0
 
 # 전체 수집된 데모 순차 재생
-python scripts/replay_demos.py --demo_idx=-1
+python scripts/replay_demos_kinematic.py --demo_idx=-1
 ```
 
 ---
@@ -316,7 +316,7 @@ python scripts/train.py --algo=act --epochs=150
 >    - 검증 손실(Validation Loss)이 갱신될 때마다 `best_model.pt`로 저장하는 로직을 포함해 줘.
 >    - **[중요] TensorBoard 연동:** `torch.utils.tensorboard.SummaryWriter`를 사용해 Train Loss, Val Loss, Learning Rate의 변화 추이를 `runs/` 폴더에 실시간으로 기록하는 코드를 필수로 넣어 줘.
 > 6. **자동 데모 수집 (`scripts/generate_scripted_demos_parallel.py`):** 사람의 키보드 조작 없이 코드(State Machine)로 로봇을 제어하여 완벽한 데모를 대량(예: 50개)으로 자동 수집하는 스크립트를 작성해 줘.
-> 7. **검증 및 평가 (`scripts/eval.py`, `replay_demos.py`):** 학습이 완료된 가중치 모델을 Isaac Sim 환경에 띄워 실제 미션 성공률을 Closed-loop로 측정하는 평가 스크립트와, 수집된 데모 파일이 정상적인지 시뮬레이션에서 재현(Replay)하는 스크립트를 구현해 줘.
+> 7. **검증 및 평가 (`scripts/eval.py`, `replay_demos_kinematic.py`):** 학습이 완료된 가중치 모델을 Isaac Sim 환경에 띄워 실제 미션 성공률을 Closed-loop로 측정하는 평가 스크립트와, 수집된 데모 파일이 정상적인지 시뮬레이션에서 재현(Replay)하는 스크립트를 구현해 줘.
 
 > 
 > **[에이전트 필수 행동 수칙 (CRITICAL)]**

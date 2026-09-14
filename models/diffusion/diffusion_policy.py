@@ -156,7 +156,8 @@ class DiffusionPolicy(nn.Module):
                 alpha_bar_prev = self.alphas_cumprod[t_prev.repeat(batch_size)].view(batch_size, 1, 1)
 
                 # Predict x_0 from current noise prediction
-                pred_x0 = (x - torch.sqrt(1.0 - alpha_bar) * pred_noise) / torch.sqrt(alpha_bar)
+                alpha_bar_clamped = alpha_bar.clamp_min(1e-6)
+                pred_x0 = (x - torch.sqrt(1.0 - alpha_bar) * pred_noise) / torch.sqrt(alpha_bar_clamped)
 
                 if i < len(timesteps) - 1:
                     dir_xt = torch.sqrt(1.0 - alpha_bar_prev) * pred_noise

@@ -80,10 +80,12 @@ def main():
             temporal_ensembling=cfg.get("temporal_ensembling", True),
         )
 
-    if "model_state_dict" in checkpoint:
-        model.load_state_dict(checkpoint["model_state_dict"])
-    else:
-        model.load_state_dict(checkpoint)
+    state_dict = checkpoint["model_state_dict"] if "model_state_dict" in checkpoint else checkpoint
+    new_state_dict = {}
+    for k, v in state_dict.items():
+        new_key = k.replace("_orig_mod.", "") if k.startswith("_orig_mod.") else k
+        new_state_dict[new_key] = v
+    model.load_state_dict(new_state_dict)
     model.to(device)
     model.eval()
 

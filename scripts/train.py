@@ -194,12 +194,15 @@ def main():
         if os.path.exists(args.resume):
             print(f"[Model] Resuming training from checkpoint: {args.resume}")
             ckpt = torch.load(args.resume, map_location=args.device, weights_only=False)
-            if isinstance(ckpt, dict) and "model_state_dict" in ckpt:
-                model.load_state_dict(ckpt["model_state_dict"])
-                start_epoch = ckpt.get('epoch', 0)
+            state_dict = ckpt["model_state_dict"] if isinstance(ckpt, dict) and "model_state_dict" in ckpt else ckpt
+            new_state_dict = {}
+            for k, v in state_dict.items():
+                new_key = k.replace("_orig_mod.", "") if k.startswith("_orig_mod.") else k
+                new_state_dict[new_key] = v
+            model.load_state_dict(new_state_dict)
+            if isinstance(ckpt, dict) and 'epoch' in ckpt:
+                start_epoch = ckpt['epoch']
                 print(f"  -> Resumed from epoch {start_epoch}")
-            else:
-                model.load_state_dict(ckpt)
         else:
             print(f"[Warning] Checkpoint not found: {args.resume}. Starting from scratch.")
 

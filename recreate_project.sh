@@ -462,7 +462,7 @@ class DualArmILEnvCfg(DualArmEnvCfg):
         self.scene.env_spacing = 2.5
 
         # Episode settings for teleoperation & evaluation
-        self.episode_length_s = 25.0  # 25 seconds per episode to give human ample time
+        self.episode_length_s = 50.0  # 25 seconds per episode to give human ample time
         self.decimation = 2           # 60Hz / 2 = 30Hz control frequency
 
         # Disable automatic time_out termination during teleop if needed (can be toggled)
@@ -2200,7 +2200,7 @@ parser.add_argument("--algo", type=str, default="diffusion", choices=["bc", "dif
 parser.add_argument("--checkpoint", type=str, default=None, help="Path to checkpoint (.pt).")
 parser.add_argument("--stats", type=str, default=None, help="Path to normalization stats.pkl.")
 parser.add_argument("--num_episodes", type=int, default=10, help="Number of evaluation episodes.")
-parser.add_argument("--max_steps_per_ep", type=int, default=1000, help="Max steps per episode (~33 seconds at 30Hz).")
+parser.add_argument("--max_steps_per_ep", type=int, default=2000, help="Max steps per episode (~33 seconds at 30Hz).")
 AppLauncher.add_app_launcher_args(parser)
 args_cli = parser.parse_args()
 
@@ -2458,7 +2458,7 @@ parser.add_argument("--algo", type=str, required=True, choices=["bc", "diffusion
 parser.add_argument("--checkpoint", type=str, required=True)
 parser.add_argument("--num_episodes", type=int, default=100, help="Total episodes to evaluate")
 parser.add_argument("--num_envs", type=int, default=16, help="Number of parallel environments")
-parser.add_argument("--max_steps_per_ep", type=int, default=1000)
+parser.add_argument("--max_steps_per_ep", type=int, default=2000)
 
 AppLauncher.add_app_launcher_args(parser)
 args_cli = parser.parse_args()

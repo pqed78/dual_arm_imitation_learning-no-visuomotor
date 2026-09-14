@@ -32,7 +32,7 @@ parser.add_argument("--algo", type=str, default="diffusion", choices=["bc", "dif
 parser.add_argument("--checkpoint", type=str, default=None, help="Path to checkpoint (.pt).")
 parser.add_argument("--stats", type=str, default=None, help="Path to normalization stats.pkl.")
 parser.add_argument("--num_episodes", type=int, default=10, help="Number of evaluation episodes.")
-parser.add_argument("--max_steps_per_ep", type=int, default=1000, help="Max steps per episode (~33 seconds at 30Hz).")
+parser.add_argument("--max_steps_per_ep", type=int, default=2000, help="Max steps per episode (~33 seconds at 30Hz).")
 AppLauncher.add_app_launcher_args(parser)
 args_cli = parser.parse_args()
 

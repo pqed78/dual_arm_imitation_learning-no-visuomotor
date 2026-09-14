@@ -19,7 +19,7 @@ parser.add_argument("--algo", type=str, required=True, choices=["bc", "diffusion
 parser.add_argument("--checkpoint", type=str, required=True)
 parser.add_argument("--num_episodes", type=int, default=100, help="Total episodes to evaluate")
 parser.add_argument("--num_envs", type=int, default=16, help="Number of parallel environments")
-parser.add_argument("--max_steps_per_ep", type=int, default=1000)
+parser.add_argument("--max_steps_per_ep", type=int, default=2000)
 
 AppLauncher.add_app_launcher_args(parser)
 args_cli = parser.parse_args()

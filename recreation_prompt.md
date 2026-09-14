@@ -144,19 +144,28 @@ python scripts/train.py --algo=act --epochs=150
 
 ---
 
-### ④ Step 4: Isaac Sim Simulation Evaluation (`eval.py`)
-Connects the trained model to the simulation robot to measure the actual closed-loop success rate.
+### ④ Step 4: Isaac Sim Simulation Evaluation (`eval.py` / `eval_parallel.py`)
+Connects the trained model to the simulation robot to measure the actual closed-loop success rate. Two evaluation modes are provided to quickly and accurately verify model performance.
 
-```bash
-# Evaluate Diffusion Policy
-python scripts/eval.py --algo=diffusion --num_episodes=10
+1. **High-Speed Parallel Evaluation (`eval_parallel.py`) [Recommended]**
+   Spawns multiple environments simultaneously to evaluate a large number of episodes in a short time.
+   ```bash
+   # Evaluate 100 episodes in parallel across 16 environments
+   python scripts/eval_parallel.py --algo=diffusion --num_episodes=100 --num_envs=16
+   ```
 
-# Evaluate ACT (Temporal Ensembling applied)
-python scripts/eval.py --algo=act --num_episodes=10
-
-# Evaluate Behavior Cloning
-python scripts/eval.py --algo=bc --num_episodes=10
-```
+2. **Sequential Single Environment Evaluation (`eval.py`)**
+   Evaluates episodes sequentially in a single environment for visual verification. (Also supports ACT and BC)
+   ```bash
+   # Evaluate 10 episodes sequentially (GUI Visualization Mode)
+   python scripts/eval.py --algo=diffusion --num_episodes=10
+   
+   # Evaluate ACT (Temporal Ensembling applied)
+   python scripts/eval.py --algo=act --num_episodes=10
+   
+   # Evaluate Behavior Cloning
+   python scripts/eval.py --algo=bc --num_episodes=10
+   ```
 
 ---
 

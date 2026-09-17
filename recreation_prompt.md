@@ -2471,6 +2471,7 @@ parser.add_argument("--checkpoint", type=str, required=True)
 parser.add_argument("--num_episodes", type=int, default=100, help="Total episodes to evaluate")
 parser.add_argument("--num_envs", type=int, default=16, help="Number of parallel environments")
 parser.add_argument("--max_steps_per_ep", type=int, default=2000)
+parser.add_argument("--record_video", action="store_true", help="Record viewport to video file.")
 
 AppLauncher.add_app_launcher_args(parser)
 args_cli = parser.parse_args()
@@ -2544,7 +2545,19 @@ def main():
     env_cfg = DualArmILEnvCfg()
     env_cfg.scene.num_envs = args_cli.num_envs
     env_cfg.sim.device = args_cli.device
-    env: ManagerBasedRLEnv = gym.make("Isaac-Dual-Arm-v0", cfg=env_cfg).unwrapped
+    
+    if args_cli.record_video:
+        if args_cli.num_envs == 1:
+            env_cfg.viewer.eye = (1.5, 0.0, 1.2)
+            env_cfg.viewer.lookat = (0.0, 0.0, 0.0)
+        else:
+            offset = max(2.0, (args_cli.num_envs ** 0.5) * 1.5)
+            env_cfg.viewer.eye = (offset, offset, offset * 0.8)
+            env_cfg.viewer.lookat = (0.0, 0.0, 0.0)
+            env_cfg.viewer.origin_type = "world"
+            
+    render_mode = "rgb_array" if args_cli.record_video else None
+    env: ManagerBasedRLEnv = gym.make("Isaac-Dual-Arm-v0", cfg=env_cfg, render_mode=render_mode).unwrapped
 
     obs_horizon = cfg.get("obs_horizon", 2)
     act_horizon = cfg.get("act_horizon", 8)
@@ -2554,6 +2567,14 @@ def main():
     num_batches = math.ceil(total_episodes / num_envs)
 
     print(f"\nStarting {total_episodes} evaluation episodes across {num_batches} batches (Batch Size: {num_envs})...\n")
+
+    video_writer = None
+    if args_cli.record_video:
+        import imageio
+        os.makedirs("videos", exist_ok=True)
+        video_path = f"videos/eval_{algo}_parallel.mp4"
+        video_writer = imageio.get_writer(video_path, fps=30)
+        print(f"[Video Recording] Saving evaluation video to: {video_path}")
 
     total_success = 0
     total_evaluated = 0
@@ -2620,6 +2641,11 @@ def main():
 
             # Step environment
             obs, reward, terminated, truncated, _ = env.step(action)
+            
+            if args_cli.record_video and video_writer is not None:
+                frame = env.render()
+                if frame is not None:
+                    video_writer.append_data(frame)
 
             # Check task success and failures
             obj_pos = env.scene["object"].data.root_pos_w # (num_envs, 3)
@@ -2680,6 +2706,8 @@ def main():
         json.dump(result_dict, f, indent=4)
     print(f" Saved evaluation results to: {result_path}")
 
+    if video_writer is not None:
+        video_writer.close()
     env.close()
     simulation_app.close()
 

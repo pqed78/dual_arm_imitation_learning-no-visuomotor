@@ -3659,12 +3659,12 @@ def main():
     
     # Adjust camera dynamically based on number of parallel environments
     if args_cli.record_video:
-        if num_envs == 1:
+        if num_parallel == 1:
             env_cfg.viewer.eye = (1.5, 0.0, 1.2)
             env_cfg.viewer.lookat = (0.0, 0.0, 0.0)
         else:
             # Pull camera back and up for grid view
-            offset = max(2.0, (num_envs ** 0.5) * 1.5)
+            offset = max(2.0, (num_parallel ** 0.5) * 1.5)
             env_cfg.viewer.eye = (offset, offset, offset * 0.8)
             env_cfg.viewer.lookat = (0.0, 0.0, 0.0)
             env_cfg.viewer.origin_type = "world"

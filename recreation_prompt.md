@@ -117,6 +117,9 @@ python scripts/replay_demos_kinematic.py --demo_idx=0
 
 # Sequentially replay all collected demos
 python scripts/replay_demos_kinematic.py --demo_idx=-1
+
+# Replay 4 demos in parallel and record viewport to a video file
+python scripts/replay_demos_kinematic.py --num_parallel=4 --record_video
 ```
 
 ---
@@ -271,6 +274,9 @@ python scripts/replay_demos_kinematic.py --demo_idx=0
 
 # 전체 수집된 데모 순차 재생
 python scripts/replay_demos_kinematic.py --demo_idx=-1
+
+# 4개의 데모를 병렬로 동시 재생하며 화면을 MP4 영상으로 녹화
+python scripts/replay_demos_kinematic.py --num_parallel=4 --record_video
 ```
 
 ---
